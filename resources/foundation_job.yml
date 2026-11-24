@@ -24,3 +24,18 @@ resources:
               env: "{{job.parameters.env}}"
               overwrite: "false"
           max_retries: 0
+        - task_key: t02_raw_ingestion
+          depends_on:
+            - task_key: t01_synthetic_data
+          notebook_task:
+            notebook_path: ../src/02_raw_ingestion.py
+            base_parameters:
+              env: "{{job.parameters.env}}"
+              mode: incremental        # each run releases the next staged batch and ingests new files
+          max_retries: 2
+          min_retry_interval_millis: 60000
+      # Scheduled micro-batches: un-pause to run every hour (serverless => availableNow per run).
+      schedule:
+        quartz_cron_expression: "0 0 * * * ?"
+        timezone_id: Asia/Kolkata
+        pause_status: PAUSED

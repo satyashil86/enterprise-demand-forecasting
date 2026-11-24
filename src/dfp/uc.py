@@ -48,6 +48,14 @@ CORE_TABLE_DDL = {
         checked_at TIMESTAMP,
         details STRING
     """,
+    "monitoring.schema_change_log": """
+        run_id STRING NOT NULL,
+        table_name STRING,
+        column_name STRING,
+        change_type STRING,
+        detected_at TIMESTAMP,
+        details STRING
+    """,
 }
 
 
@@ -100,6 +108,24 @@ def ensure_catalog(cfg: ProjectConfig, run_sql: Callable[[str], object]) -> Tupl
         msg = (f"CREATE CATALOG `{cfg.catalog}` failed ({type(exc).__name__}: {str(exc)[:200]}). "
                f"Falling back to existing catalog `{cfg.catalog_fallback}`.")
         return cfg.with_catalog(cfg.catalog_fallback), msg
+
+
+def resolve_catalog(cfg: ProjectConfig, run_sql: Callable[[str], object]) -> ProjectConfig:
+    """Pick the catalog 00_setup actually used: the configured one if it exists, else the fallback.
+
+    Lets every notebook run interactively without depending on job task values.
+    """
+    def exists(name: str) -> bool:
+        try:
+            return len(run_sql(f"SHOW CATALOGS LIKE '{name}'").collect()) > 0
+        except Exception:  # noqa: BLE001
+            return False
+
+    if exists(cfg.catalog):
+        return cfg
+    if cfg.catalog_fallback and exists(cfg.catalog_fallback):
+        return cfg.with_catalog(cfg.catalog_fallback)
+    raise RuntimeError(f"Neither `{cfg.catalog}` nor fallback `{cfg.catalog_fallback}` exists - run 00_setup first.")
 
 
 def setup_statements(cfg: ProjectConfig) -> List[str]:

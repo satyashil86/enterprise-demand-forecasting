@@ -18,8 +18,9 @@ config/                     environment, source, schema, model and forecast conf
 src/
   00_setup.py               Unity Catalog: catalog, 9 schemas, 4 volumes, audit tables
   01_synthetic_data.py      Synthetic SAP-style data: 12 sources, 2 delivery batches
+  02_raw_ingestion.py       Landing → Bronze: Auto Loader + COPY INTO, idempotency demo
   dfp/                      Shared library (pure Python where possible, unit-testable)
-    config.py  uc.py  audit.py  synthetic.py  synthetic_validation.py
+    config.py  uc.py  audit.py  synthetic.py  synthetic_validation.py  ingestion.py
 tests/                      pytest suite (runs locally and in CI)
 docs/                       Phase design notes
 .github/workflows/ci.yml    Unit tests on every push / PR

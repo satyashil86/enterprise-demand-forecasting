@@ -46,12 +46,10 @@ from dfp.audit import run_logged
 from dfp.synthetic import SyntheticConfig, generate_all, SYNTHETIC_NOTICE
 from dfp.synthetic_validation import run_checks, checks_frame
 
-cfg = load_config(ENV)
-# honour the catalog chosen by 00_setup (fallback) when run inside the job
-try:
-    cfg = cfg.with_catalog(dbutils.jobs.taskValues.get(taskKey="t00_setup", key="catalog", debugValue=cfg.catalog))
-except Exception:
-    pass
+from dfp.uc import resolve_catalog
+
+# use the catalog 00_setup actually created (configured one, or the fallback)
+cfg = resolve_catalog(load_config(ENV), spark.sql)
 
 scale = dbutils.widgets.get("scale") or cfg.env_setting("synthetic_data_scale", "small")
 hist = cfg.forecast["history"]
