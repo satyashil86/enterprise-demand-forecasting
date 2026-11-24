@@ -1,0 +1,6 @@
+# Local development / CI (Databricks serverless already provides pandas, numpy, pyarrow, pyyaml)
+pandas>=2.0
+numpy>=1.24
+pyarrow>=14
+pyyaml>=6
+pytest>=7

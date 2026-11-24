@@ -1,0 +1,49 @@
+# Environment-specific settings.
+# Select the environment with the `env` notebook widget / job parameter (dev | test | prod).
+# Databricks Free Edition has ONE workspace and ONE metastore, so dev/test are separated
+# by catalog name only. Azure Databricks (Phase 22) maps each env to its own workspace.
+
+default_env: dev
+
+project:
+  name: enterprise_demand_forecasting
+  owner_group: demand_admin
+
+environments:
+  dev:
+    catalog: demand_planning
+    # If CREATE CATALOG is not permitted, schemas are created inside this catalog instead.
+    catalog_fallback: workspace
+    synthetic_data_scale: small
+    nixtla_enabled: false        # keep TimeGPT API calls off until Phase 8 is configured
+    secret_scope: demand_planning_dev
+  test:
+    catalog: demand_planning_test
+    catalog_fallback: workspace
+    synthetic_data_scale: small
+    nixtla_enabled: false
+    secret_scope: demand_planning_test
+  prod:
+    catalog: demand_planning_prod
+    catalog_fallback: null       # prod must never silently fall back
+    synthetic_data_scale: medium
+    nixtla_enabled: true
+    secret_scope: demand_planning_prod
+
+schemas:
+  raw:        "Landing files (volumes) and raw-zone metadata"
+  bronze:     "Raw Delta tables, append-only, with source metadata"
+  silver:     "Cleansed, deduplicated, validated, SCD-managed data and quarantine tables"
+  gold:       "Business-ready facts and dimensions at weekly grain"
+  features:   "Model-ready feature tables (leakage-safe)"
+  ml:         "Backtests, model comparison, selection and registry metadata"
+  forecast:   "Published 104-week forecasts with P10/P50/P90"
+  monitoring: "Data-quality, profiling, model and pipeline monitoring"
+  audit:      "Run logs, ingestion logs, outlier and selection audit trails"
+
+volumes:
+  # schema.volume : purpose
+  raw.source_files:    "Landing zone for source files (Auto Loader input) and synthetic staging batches"
+  raw.checkpoints:     "Structured Streaming / Auto Loader checkpoints and schema locations"
+  ml.model_artifacts:  "Serialised model artifacts, feature lists, residual-interval tables"
+  audit.config:        "Copy of the YAML configuration used by each run"

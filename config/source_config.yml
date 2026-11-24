@@ -1,0 +1,99 @@
+# Metadata-driven ingestion configuration (consumed by Phase 2: 02_raw_ingestion.py).
+# Every source lands under /Volumes/<catalog>/raw/source_files/landing/<source_name>/
+# Synthetic batches are generated to /Volumes/<catalog>/raw/source_files/staging/batch_NNN/<source_name>/
+# and "released" into landing by the ingestion demo, to simulate files arriving over time.
+
+synthetic: true   # all data in this project is SYNTHETIC unless replaced by real ERP extracts
+
+sources:
+  sales:
+    description: "SAP-style billing/delivery lines (VBRK/VBRP-like). Shipped sell-in."
+    format: csv
+    primary_key: [sales_doc_id, sales_doc_item]
+    event_date_column: posting_date
+    bronze_table: bronze.sales_raw
+    load_type: incremental
+    ingestion_method: autoloader
+  pos:
+    description: "Retail POS sell-out, one line per store x SKU x day (aggregated basket lines)."
+    format: csv
+    primary_key: [transaction_id]
+    event_date_column: transaction_date
+    bronze_table: bronze.pos_raw
+    load_type: streaming
+    ingestion_method: autoloader
+  orders:
+    description: "SAP-style customer sales orders (VBAK/VBAP-like). Unconstrained demand signal."
+    format: json
+    primary_key: [order_id, order_item]
+    event_date_column: order_date
+    bronze_table: bronze.orders_raw
+    load_type: incremental
+    ingestion_method: autoloader
+  products:
+    description: "Material master (MARA/MAKT-like) with hierarchy and lifecycle. SCD2 in Silver."
+    format: csv
+    primary_key: [sku_id]
+    bronze_table: bronze.products_raw
+    load_type: full
+    ingestion_method: copy_into
+  promotions:
+    description: "Trade promotion calendar: executed history + approved future plans."
+    format: json
+    primary_key: [promotion_id]
+    event_date_column: start_date
+    bronze_table: bronze.promotions_raw
+    load_type: incremental
+    ingestion_method: autoloader
+  pricing:
+    description: "Price condition records (KONP-like), change-based, per SKU x region."
+    format: csv
+    primary_key: [price_record_id]
+    event_date_column: effective_date
+    bronze_table: bronze.pricing_raw
+    load_type: incremental
+    ingestion_method: autoloader
+  weather:
+    description: "Daily weather actuals per region plus short-range forecasts."
+    format: json
+    primary_key: [region_id, date, weather_forecast_type]
+    event_date_column: date
+    bronze_table: bronze.weather_raw
+    load_type: incremental
+    ingestion_method: autoloader
+  inventory:
+    description: "Weekly DC inventory snapshot per SKU x region (MARD/MSEG-like)."
+    format: parquet
+    primary_key: [snapshot_date, sku_id, region_id]
+    event_date_column: snapshot_date
+    bronze_table: bronze.inventory_raw
+    load_type: incremental
+    ingestion_method: autoloader
+  stores:
+    description: "Store / ship-to master (KNA1-like). SCD1 in Silver."
+    format: csv
+    primary_key: [store_id]
+    bronze_table: bronze.stores_raw
+    load_type: full
+    ingestion_method: copy_into
+  regions:
+    description: "Region and country master."
+    format: csv
+    primary_key: [region_id]
+    bronze_table: bronze.regions_raw
+    load_type: full
+    ingestion_method: copy_into
+  calendar:
+    description: "Daily calendar with ISO weeks, holidays and festivals per country (history + future)."
+    format: csv
+    primary_key: [date, country_code]
+    bronze_table: bronze.calendar_raw
+    load_type: full
+    ingestion_method: copy_into
+  suppliers:
+    description: "Supplier / plant master with lead times and MOQ (LFA1/EINE-like)."
+    format: csv
+    primary_key: [supplier_id]
+    bronze_table: bronze.suppliers_raw
+    load_type: full
+    ingestion_method: copy_into

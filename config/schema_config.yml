@@ -1,0 +1,169 @@
+# Explicit expected schemas for the landing files (contract with source systems).
+# Auto Loader in Phase 2 uses these as schema hints; columns that arrive later
+# (schema evolution) are added via addNewColumns and captured in _rescued_data otherwise.
+# Types use Spark SQL DDL names.
+
+sales:
+  sales_doc_id: string
+  sales_doc_item: int
+  doc_type: string
+  order_id: string
+  posting_date: string        # kept as string in Bronze; mixed formats are standardised in Silver
+  sku_id: string
+  region_id: string
+  channel: string
+  plant_id: string
+  delivered_quantity: double
+  uom: string
+  net_value: double
+  currency: string
+
+pos:
+  transaction_id: string
+  transaction_date: string
+  sku_id: string
+  store_id: string
+  region_id: string
+  channel: string
+  quantity: double
+  revenue: double
+  selling_price: double
+  promotion_id: string
+  returned_quantity: double
+  # added in batch_002 (schema evolution test):
+  # loyalty_member_flag: boolean
+  # basket_count: int
+
+orders:
+  order_id: string
+  order_item: int
+  order_date: string
+  requested_delivery_date: string
+  sku_id: string
+  region_id: string
+  channel: string
+  customer_id: string
+  ordered_quantity: double
+  confirmed_quantity: double
+  order_status: string
+  # added in batch_002: order_source: string
+
+products:
+  sku_id: string
+  product_id: string
+  product_name: string
+  brand: string
+  category: string
+  subcategory: string
+  pack_size: string
+  uom: string
+  launch_date: string
+  discontinue_date: string
+  lifecycle_status: string
+  shelf_life: int
+  supplier_id: string
+  unit_cost_usd: double
+  last_modified: string
+  # added in batch_002: sustainability_tag: string
+
+promotions:
+  promotion_id: string
+  sku_id: string
+  region_id: string
+  channel: string
+  start_date: string
+  end_date: string
+  promotion_type: string
+  discount_percentage: double
+  display_flag: boolean
+  marketing_campaign: string
+  planned_promotion_flag: boolean
+  promotion_status: string
+  approved_date: string
+
+pricing:
+  price_record_id: string
+  sku_id: string
+  region_id: string
+  effective_date: string
+  regular_price: double
+  promotional_price: double
+  previous_price: double
+  current_price: double
+  competitor_price: double
+  currency: string
+  price_status: string
+  change_reason: string
+
+weather:
+  region_id: string
+  date: string
+  temperature: double
+  rainfall: double
+  humidity: double
+  extreme_weather_flag: boolean
+  weather_forecast_type: string
+  forecast_issued_date: string
+
+inventory:
+  snapshot_date: string
+  sku_id: string
+  region_id: string
+  plant_id: string
+  on_hand_qty: double
+  in_transit_qty: double
+  open_po_qty: double
+  safety_stock_qty: double
+  reorder_point_qty: double
+  lead_time_days: int
+  moq: double
+  replenishment_frequency_days: int
+  unit_cost: double
+  currency: string
+
+stores:
+  store_id: string
+  store_name: string
+  region_id: string
+  channel: string
+  store_format: string
+  size_index: double
+  open_date: string
+  status: string
+  last_modified: string
+
+regions:
+  region_id: string
+  region_name: string
+  country: string
+  country_code: string
+  currency: string
+  hemisphere: string
+
+calendar:
+  date: string
+  country_code: string
+  week_start: string
+  iso_year: int
+  iso_week: int
+  month: int
+  quarter: int
+  year: int
+  day_of_week: int
+  is_weekend: boolean
+  holiday_flag: boolean
+  holiday_name: string
+  festival_flag: boolean
+  festival_name: string
+  is_future: boolean
+
+suppliers:
+  supplier_id: string
+  supplier_name: string
+  country: string
+  category: string
+  lead_time_days: int
+  lead_time_std_days: double
+  moq: double
+  replenishment_frequency_days: int
+  reliability_score: double

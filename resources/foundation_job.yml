@@ -1,0 +1,26 @@
+# Serverless job (Free Edition compatible: no cluster definitions, no job_clusters).
+resources:
+  jobs:
+    dfp_foundation:
+      name: "[${bundle.target}] dfp_foundation"
+      max_concurrent_runs: 1
+      parameters:
+        - name: env
+          default: ${var.env}
+      tasks:
+        - task_key: t00_setup
+          notebook_task:
+            notebook_path: ../src/00_setup.py
+            base_parameters:
+              env: "{{job.parameters.env}}"
+          max_retries: 1
+          min_retry_interval_millis: 60000
+        - task_key: t01_synthetic_data
+          depends_on:
+            - task_key: t00_setup
+          notebook_task:
+            notebook_path: ../src/01_synthetic_data.py
+            base_parameters:
+              env: "{{job.parameters.env}}"
+              overwrite: "false"
+          max_retries: 0

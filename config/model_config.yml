@@ -1,0 +1,34 @@
+# Model settings. Placeholders below are refined and validated in Phases 8-14;
+# nothing here is used before then.
+
+selection:
+  primary_metric: wape
+  secondary_checks: [bias, mae, stability]
+  max_abs_bias_pct: 20
+  min_history_weeks: 104
+  min_nonzero_weeks: 26
+  fallback_model: seasonal_naive
+
+backtesting:
+  strategy: rolling_origin
+  n_origins: 4
+  step_weeks: 13
+  evaluation_horizons: [4, 13, 26, 52, 104]
+
+models:
+  timegpt:
+    enabled: true
+    secret_key: nixtla_api_key   # read from the env's secret scope, never hard-coded
+    model_id: null               # verified against the Nixtla SDK in Phase 8
+  random_forest:
+    enabled: true
+  xgboost:
+    enabled: true
+  lightgbm:
+    enabled: true
+  sarima:
+    enabled: true
+    season_length: 52
+  seasonal_naive:
+    enabled: true
+    season_length: 52

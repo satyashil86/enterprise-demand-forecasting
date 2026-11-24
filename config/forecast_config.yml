@@ -1,0 +1,27 @@
+# Forecasting business settings (used from Phase 7 onwards; history settings used by Phase 1).
+
+frequency: W-MON                 # weekly buckets, ISO weeks starting Monday
+forecast_horizon_weeks: 104
+history:
+  min_weeks_required: 104        # initial synthetic dataset
+  synthetic_history_weeks: 156   # 3 years; can be raised to 208+
+  # Monday of the last COMPLETE week of history. null = derive from the run date.
+  history_end_week_start: "2026-11-16"
+
+grain:
+  modelling: [sku_id, region_id, channel]
+  reporting_levels: [sku_id, product_id, brand, subcategory, category, region_id, country, channel]
+
+demand_definition:
+  # Unconstrained customer demand = ordered quantity (sell-in orders), not shipments,
+  # because shipments are capped by inventory availability. POS sell-out is a feature.
+  target_source: orders
+  target_column: ordered_quantity
+
+categories: [Food, Personal Care, Beauty & Wellbeing, Ice Cream, Home Care]
+channels: [Modern Trade, General Trade, E-Commerce]
+
+future_exogenous_policy:
+  promotions: "Only promotions with promotion_status = 'Approved' at the forecast origin"
+  prices: "Only price records with price_status = 'Planned' and approved at the forecast origin; otherwise carry forward last regular price"
+  weather: "Short-range forecast where available, else documented climatological normals (same ISO week, trailing years)"
