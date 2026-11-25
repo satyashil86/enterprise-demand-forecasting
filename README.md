@@ -19,8 +19,9 @@ src/
   00_setup.py               Unity Catalog: catalog, 9 schemas, 4 volumes, audit tables
   01_synthetic_data.py      Synthetic SAP-style data: 12 sources, 2 delivery batches
   02_raw_ingestion.py       Landing → Bronze: Auto Loader + COPY INTO, idempotency demo
+  03_silver_cleansing.py    Bronze → Silver: validation, quarantine, MERGE, SCD1/SCD2
   dfp/                      Shared library (pure Python where possible, unit-testable)
-    config.py  uc.py  audit.py  synthetic.py  synthetic_validation.py  ingestion.py
+    config.py  uc.py  audit.py  synthetic.py  synthetic_validation.py  ingestion.py  silver.py
 tests/                      pytest suite (runs locally and in CI)
 docs/                       Phase design notes
 .github/workflows/ci.yml    Unit tests on every push / PR
@@ -38,7 +39,7 @@ docs/                       Phase design notes
 
 ```bash
 pip install -r requirements-dev.txt
-pytest            # about 20 s; generates the full small dataset in a temp dir
+pytest            # ~4 min; generates the dataset and runs Silver logic on local Spark (needs Java)
 ```
 
 ## Unity Catalog layout

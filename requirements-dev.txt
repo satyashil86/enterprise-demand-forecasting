@@ -4,3 +4,5 @@ numpy>=1.24
 pyarrow>=14
 pyyaml>=6
 pytest>=7
+pyspark==3.5.3     # local Spark for Silver tests (Java 11/17 required)
+tzdata

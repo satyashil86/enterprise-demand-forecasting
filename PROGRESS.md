@@ -1,42 +1,32 @@
-# Project progress tracker
+# Project progress tracker (condensed 10-phase plan)
 
-Status key: ✅ done & tested locally · 🟡 code complete, awaiting Databricks run · ⬜ not started
+Status key: ✅ passed on Databricks · 🟡 code complete and tested locally, awaiting a Databricks run · ⬜ not started
 
-| Phase | Notebook / module | Status | Acceptance evidence |
-|---|---|---|---|
-| 0 Setup & Unity Catalog | `src/00_setup.py`, `dfp/config.py`, `dfp/uc.py`, `dfp/audit.py` | ✅ | Run on Databricks Free Edition (24-Nov-2026): no missing schemas, volumes or tables; volume write test passed. |
-| 1 Synthetic SAP-style data | `src/01_synthetic_data.py`, `dfp/synthetic.py`, `dfp/synthetic_validation.py` | ✅ | Run on Databricks with no errors reported (24-Nov-2026). Locally: 64/64 acceptance checks, 12 unit tests. |
-| 2 Raw ingestion → Bronze (Auto Loader, COPY INTO, replay) | `src/02_raw_ingestion.py`, `dfp/ingestion.py` | 🟡 | 16 unit tests pass locally (release, options, COPY INTO SQL, drift, catalog resolution). Needs a Databricks run of `demo` mode, which should end with `PHASE 2 ACCEPTANCE: PASSED`. |
-| 3 Bronze processing (replay, audit views, OPTIMIZE) | `03_bronze_processing.py` | ⬜ | Bronze tables themselves are created in Phase 2. |
-| 4 Silver (cleansing, SCD1/2, quarantine) | `04_silver_cleansing.py` | ⬜ | |
-| 5 EDA | `05_eda_analysis.py` | ⬜ | |
-| 6 Outliers | `06_outlier_detection.py` | ⬜ | |
-| 7 Features (leakage-safe) | `07_feature_engineering.py` | ⬜ | |
-| 8 TimeGPT | `08_timegpt_model.py` | ⬜ | |
-| 9–12 RF / XGBoost / LightGBM / SARIMA / Seasonal Naive | `09`–`12` | ⬜ | |
-| 13–14 Backtesting & WAPE selection | `13`, `14` | ⬜ | |
-| 15–16 104-week forecast & evaluation | `15`, `16` | ⬜ | |
-| 17 Inventory analytics | `17_inventory_analytics.py` | ⬜ | |
-| 18 Monitoring | `18_monitoring.py` | ⬜ | |
-| Dashboard (5 pages) | `dashboard/frontend` | ⬜ | Needs the reference `demand_planning_dashboard.html` (not uploaded yet). |
-| Governance / RBAC | | ⬜ | |
-| Lakeflow Jobs & CI/CD | `databricks.yml`, `resources/`, `.github/workflows` | 🟡 | Bundle skeleton + 2-task foundation job; CI runs pytest. |
-| Azure integration | | ⬜ | Only after Databricks validation. |
+| # | Phase | Notebook(s) | Status | Evidence |
+|---|---|---|---|---|
+| 1 | Setup + synthetic data | `00_setup`, `01_synthetic_data` | ✅ | Phase 0 checks passed; Phase 1 ran with no errors (24-Nov-2026). Locally: 64/64 data checks. |
+| 2 | Ingestion → Bronze (Auto Loader, COPY INTO) | `02_raw_ingestion` | ✅ | `PHASE 2 ACCEPTANCE: PASSED (55 checks)` on Databricks (25-Nov-2026). |
+| 3 | Silver: data quality, quarantine, MERGE, SCD1/SCD2 (+ Bronze append-only, time travel, clustering) | `03_silver_cleansing` | 🟡 | 17 local PySpark tests (ANSI mode) pass against the real synthetic batches. Needs a Databricks run → `PHASE 3 ACCEPTANCE: PASSED`. |
+| 4 | Gold (star schema) + EDA | `04_gold_model`, `05_eda` | ⬜ | |
+| 5 | Outliers + feature engineering (leakage-safe) | `06_outliers`, `07_features` | ⬜ | |
+| 6 | Models: Seasonal Naive, AutoARIMA, XGBoost/LightGBM, (RF), TimeGPT (optional) | `08_models` | ⬜ | |
+| 7 | Backtesting, WAPE model selection, 104-week forecast (P10/P50/P90) | `09_backtest_select`, `10_forecast` | ⬜ | |
+| 8 | Inventory risk + monitoring | `11_inventory`, `12_monitoring` | ⬜ | |
+| 9 | Dashboard (Databricks AI/BI, 5 pages) + Unity Catalog governance | `13_governance` | ⬜ | Needs `demand_planning_dashboard.html` as the reference |
+| 10 | Orchestration (Lakeflow Job), CI/CD (Asset Bundles + GitHub Actions), Azure essentials | `databricks.yml`, `.github/` | 🟡 | Bundle and job skeleton (tasks t00–t03), CI runs the tests |
 
-## Phase gate for 2 (needs a Databricks run)
+## Phase gate for 3
+1. Copy the new files into `C:\demand-forecasting-platform`, then run `git add .`, `git commit`, `git push`.
+2. In the Databricks Git folder, discard any run-only changes, then click **Pull**.
+3. Run `src/03_silver_cleansing` (env=dev, mode=run). It should end with `PHASE 3 ACCEPTANCE: PASSED`.
 
-1. In the Databricks Git folder, click **Pull** to get the new code.
-2. Run `src/02_raw_ingestion.py` with env=dev, mode=demo. It should end with `PHASE 2 ACCEPTANCE: PASSED`.
+## Decisions
+- **Demand target:** `orders.ordered_quantity` (unconstrained). Shipments are capped by stock.
+- **Silver is a curated contract:** Bronze evolves automatically, Silver only through a change to `dfp/silver.py: SPECS`.
+- **Incremental Silver:** a high-watermark on Bronze `_ingested_at` plus idempotent MERGE (no streaming foreachBatch, so it runs reliably on serverless).
+- **Keying spikes (×50 / ×10)** stay in Silver; they are separated from genuine spikes in the outlier phase.
+- **Late-arriving dimension:** facts with an unknown SKU are quarantined. Re-processing them after the master arrives is a planned improvement.
 
-## Phase gate for 0 + 1 (passed)
-
-1. Run `src/00_setup.py` (env=dev). It should end with `PHASE 0 ACCEPTANCE: PASSED`.
-2. Run `src/01_synthetic_data.py` (env=dev, overwrite=false). It should end with `PHASE 1 ACCEPTANCE: PASSED (64 checks)`.
-3. Check: `SELECT * FROM demand_planning.audit.pipeline_run_log` shows two `SUCCEEDED` rows.
-
-## Open items and risks
-
-- **Catalog creation on Free Edition:** the setup tries `CREATE CATALOG demand_planning`. If that's not allowed, it falls back to the `workspace` catalog (dev/test only) and says so.
-- **Nixtla TimeGPT:** it's a paid external API, and Free Edition limits outbound internet to trusted domains. Reaching `api.nixtla.io` from serverless has to be checked at the start of Phase 8. If it can't be reached, TimeGPT runs from CI or a local runner, and the results are written back to Delta.
-- **Groups / RBAC:** Free Edition has no account console. Phase 17 will check whether workspace-local groups can be created. If not, the grant scripts are delivered and tested on Azure Databricks.
-- **Demand target:** unconstrained demand = `orders.ordered_quantity` (sell-in orders). Shipments are capped by stock (synthetic fill rate ≈ 97%), so they aren't used.
+## Open items
+- Nixtla TimeGPT: a paid API, and Free Edition has limited outbound access. Check before the model phase.
+- RBAC groups: Free Edition has no account console. Check workspace-local groups in phase 9.
