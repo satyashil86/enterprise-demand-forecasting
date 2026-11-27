@@ -7,19 +7,19 @@ Status key: ✅ passed on Databricks · 🟡 code complete and tested locally, a
 | 1 | Setup + synthetic data | `00_setup`, `01_synthetic_data` | ✅ | Phase 0 checks passed; Phase 1 ran with no errors (24-Nov-2026). Locally: 64/64 data checks. |
 | 2 | Ingestion → Bronze (Auto Loader, COPY INTO) | `02_raw_ingestion` | ✅ | `PHASE 2 ACCEPTANCE: PASSED (55 checks)` on Databricks (25-Nov-2026). |
 | 3 | Silver: data quality, quarantine, MERGE, SCD1/SCD2 (+ Bronze append-only, time travel, clustering) | `03_silver_cleansing` | ✅ | `PHASE 3 ACCEPTANCE: PASSED (56 checks)` on Databricks (26-Nov-2026). |
-| 4 | Gold (star schema) + EDA, simplified plain PySpark | `04_gold`, `05_eda` | 🟡 | Both notebooks run end-to-end on local Spark (ANSI on) with the synthetic data: 645 series, 93k rows. Needs a Databricks run. |
-| 5 | Outliers + feature engineering (leakage-safe) | `06_outliers`, `07_features` | ⬜ | |
+| 4 | Gold (star schema) + EDA, simplified plain PySpark | `04_gold`, `05_eda` | ✅ | `PHASE 4 GOLD: PASSED` on Databricks (27-Nov-2026): 93,299 rows, 645 series, 2023-11-27 → 2026-11-16. |
+| 5 | Outliers + feature engineering (leakage-safe) | `06_outliers`, `07_features` | 🟡 | Local Spark run: 15 weeks treated as errors, 14 of them real (14/16 injected ×10 typos caught), 0 genuine spikes changed; 45 features, all 4 leakage checks pass. Needs a Databricks run. |
 | 6 | Models: Seasonal Naive, AutoARIMA, XGBoost/LightGBM, (RF), TimeGPT (optional) | `08_models` | ⬜ | |
 | 7 | Backtesting, WAPE model selection, 104-week forecast (P10/P50/P90) | `09_backtest_select`, `10_forecast` | ⬜ | |
 | 8 | Inventory risk + monitoring | `11_inventory`, `12_monitoring` | ⬜ | |
 | 9 | Dashboard (Databricks AI/BI, 5 pages) + Unity Catalog governance | `13_governance` | ⬜ | Needs `demand_planning_dashboard.html` as the reference |
 | 10 | Orchestration (Lakeflow Job), CI/CD (Asset Bundles + GitHub Actions), Azure essentials | `databricks.yml`, `.github/` | 🟡 | Bundle and job skeleton (tasks t00–t05), CI runs the tests |
 
-## Phase gate for 4
-1. Copy the new files into `C:\demand-forecasting-platform`, then run `git add .`, `git commit`, `git push`.
-2. In the Databricks Git folder, discard any run-only changes, then click **Pull**.
-3. Run `src/04_gold`. It should end with `PHASE 4 GOLD: PASSED`.
-4. Run `src/05_eda`. It should end with `PHASE 4 EDA: PASSED`.
+## Phase gate for 5
+1. Copy the new files into `C:\demand-forecasting-platform`, then run `git add -A`, `git commit`, `git push`.
+2. In Databricks, discard any run-only changes, then click **Pull**.
+3. Run `src/06_outliers`. It should end with `PHASE 5 OUTLIERS: PASSED`.
+4. Run `src/07_features`. It should end with `PHASE 5 FEATURES: PASSED`.
 
 ## Style from Phase 4 on
 Notebooks are written in plain PySpark: each step sits in its own cell with a short explanation and simple `assert` checks. There are no new helper libraries. Phases 0–3 are kept as they are, because they have already passed.

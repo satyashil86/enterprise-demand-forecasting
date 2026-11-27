@@ -22,6 +22,8 @@ src/
   03_silver_cleansing.py    Bronze → Silver: validation, quarantine, MERGE, SCD1/SCD2
   04_gold.py                Silver → Gold: weekly star schema + weekly_demand_features (plain PySpark)
   05_eda.py                 EDA: demand classes, seasonality, promo/price/weather effects, lifecycle, charts
+  06_outliers.py            Spike detection (robust z, IQR, rolling median); genuine vs data error; cleaned demand
+  07_features.py            Leakage-safe features: lags, rolling, seasonality, promo, price, POS lags, weather
   dfp/                      Shared library (pure Python where possible, unit-testable)
     config.py  uc.py  audit.py  synthetic.py  synthetic_validation.py  ingestion.py  silver.py
 tests/                      pytest suite (runs locally and in CI)
