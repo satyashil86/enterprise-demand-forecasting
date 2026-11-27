@@ -20,6 +20,8 @@ src/
   01_synthetic_data.py      Synthetic SAP-style data: 12 sources, 2 delivery batches
   02_raw_ingestion.py       Landing → Bronze: Auto Loader + COPY INTO, idempotency demo
   03_silver_cleansing.py    Bronze → Silver: validation, quarantine, MERGE, SCD1/SCD2
+  04_gold.py                Silver → Gold: weekly star schema + weekly_demand_features (plain PySpark)
+  05_eda.py                 EDA: demand classes, seasonality, promo/price/weather effects, lifecycle, charts
   dfp/                      Shared library (pure Python where possible, unit-testable)
     config.py  uc.py  audit.py  synthetic.py  synthetic_validation.py  ingestion.py  silver.py
 tests/                      pytest suite (runs locally and in CI)

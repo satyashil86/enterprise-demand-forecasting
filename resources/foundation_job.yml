@@ -44,6 +44,22 @@ resources:
               mode: run                # incremental via high-watermark; idempotent MERGE
           max_retries: 1
           min_retry_interval_millis: 60000
+        - task_key: t04_gold
+          depends_on:
+            - task_key: t03_silver_cleansing
+          notebook_task:
+            notebook_path: ../src/04_gold.py
+            base_parameters:
+              env: "{{job.parameters.env}}"
+          max_retries: 1
+        - task_key: t05_eda
+          depends_on:
+            - task_key: t04_gold
+          notebook_task:
+            notebook_path: ../src/05_eda.py
+            base_parameters:
+              env: "{{job.parameters.env}}"
+          max_retries: 0
       # Scheduled micro-batches: un-pause to run every hour (serverless => availableNow per run).
       schedule:
         quartz_cron_expression: "0 0 * * * ?"
