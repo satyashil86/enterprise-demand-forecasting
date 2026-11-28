@@ -27,10 +27,12 @@ src/
   08_models_backtest.py     Seasonal Naive, MSTL-ARIMA, LightGBM, XGBoost, RF (+TimeGPT optional); rolling backtest; WAPE selection
   09_forecast.py            104-week forecast per series with P10/P50/P90 -> forecast.weekly_demand_forecast
   10_inventory_monitoring.py Days of supply, stockout/excess risk, safety stock, order suggestion; health checks
-  11_dashboard_governance.py Views for the 5-page AI/BI dashboard; groups, GRANTs, row filter + column mask
+  11_dashboard_governance.py Views for the AI/BI dashboard; groups, GRANTs, row filter + column mask
+  12_create_dashboard.py    Creates/updates + publishes the 'Demand Planning' dashboard from dashboard/*.lvdash.json
   dfp/                      Shared library (pure Python where possible, unit-testable)
     config.py  uc.py  audit.py  synthetic.py  synthetic_validation.py  ingestion.py  silver.py  forecasting.py
 tests/                      pytest suite (runs locally and in CI)
+dashboard/                  Dashboard as code: build_dashboard.py -> demand_planning.lvdash.json
 docs/                       Phase design notes
 .github/workflows/ci.yml    Unit tests on every push / PR
 .github/workflows/deploy.yml Bundle validate + deploy (dev on push, prod on approval)

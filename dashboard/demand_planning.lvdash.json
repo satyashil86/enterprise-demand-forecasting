@@ -1,0 +1,2381 @@
+{
+  "datasets": [
+    {
+      "name": "ds_kpis",
+      "displayName": "Kpis",
+      "queryLines": [
+        "SELECT * FROM __CATALOG__.forecast.vw_kpis "
+      ]
+    },
+    {
+      "name": "ds_trend",
+      "displayName": "Trend",
+      "queryLines": [
+        "SELECT week, category, region, channel, 'Actual' AS series, SUM(actual) AS units ",
+        "FROM __CATALOG__.forecast.vw_overview WHERE series_type = 'history' AND week >= DATE_SUB(CURRENT_DATE(), 800) ",
+        "GROUP BY ALL ",
+        "UNION ALL SELECT week, category, region, channel, 'Forecast P50', SUM(p50) ",
+        "FROM __CATALOG__.forecast.vw_overview WHERE series_type = 'forecast' GROUP BY ALL ",
+        "UNION ALL SELECT week, category, region, channel, 'P10 (low)', SUM(p10) ",
+        "FROM __CATALOG__.forecast.vw_overview WHERE series_type = 'forecast' GROUP BY ALL ",
+        "UNION ALL SELECT week, category, region, channel, 'P90 (high)', SUM(p90) ",
+        "FROM __CATALOG__.forecast.vw_overview WHERE series_type = 'forecast' GROUP BY ALL "
+      ]
+    },
+    {
+      "name": "ds_forecast",
+      "displayName": "Forecast",
+      "queryLines": [
+        "SELECT forecast_week, forecast_horizon, sku_id, category, brand, region, channel, selected_model, p10, p50, p90, ",
+        "CONCAT(sku_id, '|', region, '|', channel) AS series_key ",
+        "FROM __CATALOG__.forecast.weekly_demand_forecast "
+      ]
+    },
+    {
+      "name": "ds_sku_forecast",
+      "displayName": "Sku Forecast",
+      "queryLines": [
+        "SELECT sku_id, category, brand, region, channel, selected_model, ",
+        "ROUND(SUM(CASE WHEN forecast_horizon <= 13 THEN p50 END)) AS next_13_weeks, ",
+        "ROUND(SUM(CASE WHEN forecast_horizon <= 52 THEN p50 END)) AS next_52_weeks, ",
+        "ROUND(SUM(p50)) AS next_104_weeks, ",
+        "ROUND(MAX(validation_wape), 1) AS segment_wape_pct ",
+        "FROM __CATALOG__.forecast.weekly_demand_forecast GROUP BY ALL "
+      ]
+    },
+    {
+      "name": "ds_inventory",
+      "displayName": "Inventory",
+      "queryLines": [
+        "SELECT sku_id, region_id AS region, category, ROUND(days_of_supply, 1) AS days_of_supply, first_stockout_week, ",
+        "stockout_risk, excess_flag, ROUND(excess_units) AS excess_units, ROUND(safety_stock) AS safety_stock, ",
+        "ROUND(reorder_point) AS reorder_point, CAST(suggested_order_qty AS BIGINT) AS suggested_order_qty, ",
+        "CASE WHEN stockout_risk = 'High' THEN 1 ELSE 0 END AS is_high_risk, ",
+        "CASE WHEN stockout_risk = 'Medium' THEN 1 ELSE 0 END AS is_medium_risk, ",
+        "CASE WHEN excess_flag THEN 1 ELSE 0 END AS is_excess ",
+        "FROM __CATALOG__.forecast.inventory_risk "
+      ]
+    },
+    {
+      "name": "ds_projection",
+      "displayName": "Projection",
+      "queryLines": [
+        "SELECT forecast_week, sku_id, region_id AS region, category, p50 AS weekly_forecast, projected_stock ",
+        "FROM __CATALOG__.forecast.inventory_projection "
+      ]
+    },
+    {
+      "name": "ds_acc_model",
+      "displayName": "Acc Model",
+      "queryLines": [
+        "WITH b AS (SELECT * FROM __CATALOG__.ml.backtest_results WHERE forecast IS NOT NULL), ",
+        "n AS (SELECT COUNT(DISTINCT model) AS k FROM b), ",
+        "common AS (SELECT sku_id, region_id, channel, fold_origin, week_start FROM b ",
+        "GROUP BY ALL HAVING COUNT(DISTINCT model) = (SELECT k FROM n)) ",
+        "SELECT b.model, ROUND(100 * SUM(ABS(b.actual - b.forecast)) / SUM(b.actual), 1) AS wape_pct, ",
+        "ROUND(100 * SUM(b.forecast - b.actual) / SUM(b.actual), 1) AS bias_pct ",
+        "FROM b JOIN common USING (sku_id, region_id, channel, fold_origin, week_start) GROUP BY b.model "
+      ]
+    },
+    {
+      "name": "ds_acc_horizon",
+      "displayName": "Acc Horizon",
+      "queryLines": [
+        "WITH b AS (SELECT * FROM __CATALOG__.ml.backtest_results WHERE forecast IS NOT NULL), ",
+        "n AS (SELECT COUNT(DISTINCT model) AS k FROM b), ",
+        "common AS (SELECT sku_id, region_id, channel, fold_origin, week_start FROM b ",
+        "GROUP BY ALL HAVING COUNT(DISTINCT model) = (SELECT k FROM n)) ",
+        "SELECT b.model, b.horizon_bucket, ROUND(100 * SUM(ABS(b.actual - b.forecast)) / SUM(b.actual), 1) AS wape_pct ",
+        "FROM b JOIN common USING (sku_id, region_id, channel, fold_origin, week_start) GROUP BY b.model, b.horizon_bucket "
+      ]
+    },
+    {
+      "name": "ds_selection",
+      "displayName": "Selection",
+      "queryLines": [
+        "SELECT segment, selected_model, ROUND(validation_wape, 1) AS wape_pct, ",
+        "ROUND(seasonal_naive_wape, 1) AS naive_wape_pct, ROUND(forecast_value_add, 1) AS value_add_pts, ",
+        "ROUND(forecast_bias, 1) AS bias_pct, review_flag ",
+        "FROM __CATALOG__.ml.model_selection "
+      ]
+    },
+    {
+      "name": "ds_anomalies",
+      "displayName": "Anomalies",
+      "queryLines": [
+        "SELECT week, sku_id, region, channel, category, actual_demand_raw, actual_demand_clean, expected_demand, ",
+        "ROUND(robust_z, 1) AS robust_z, COALESCE(outlier_reason, 'drop / price rule') AS outlier_reason, treatment_method ",
+        "FROM __CATALOG__.forecast.vw_anomalies "
+      ]
+    },
+    {
+      "name": "ds_insights",
+      "displayName": "Insights",
+      "queryLines": [
+        "SELECT insight, sku_id, region, metric, detail FROM __CATALOG__.forecast.vw_insights "
+      ]
+    }
+  ],
+  "pages": [
+    {
+      "name": "overview",
+      "displayName": "1 \u00b7 Overview",
+      "pageType": "PAGE_TYPE_CANVAS",
+      "layoutVersion": "GRID_V1",
+      "layout": [
+        {
+          "widget": {
+            "name": "title_overview",
+            "multilineTextboxSpec": {
+              "lines": [
+                "## Demand Planning \u2013 104-week forecast  \u00b7  \u26a0\ufe0f SYNTHETIC DATA"
+              ]
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 0,
+            "width": 12,
+            "height": 1
+          }
+        },
+        {
+          "widget": {
+            "name": "kpi_wape",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_kpis",
+                  "fields": [
+                    {
+                      "name": "sum(wape_pct)",
+                      "expression": "SUM(`wape_pct`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "sum(wape_pct)",
+                  "displayName": "WAPE % (backtest)"
+                }
+              },
+              "frame": {
+                "title": "WAPE % (backtest)",
+                "showTitle": true
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 1,
+            "width": 3,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "kpi_bias",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_kpis",
+                  "fields": [
+                    {
+                      "name": "sum(bias_pct)",
+                      "expression": "SUM(`bias_pct`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "sum(bias_pct)",
+                  "displayName": "Bias % (+ = over-forecast)"
+                }
+              },
+              "frame": {
+                "title": "Bias % (+ = over-forecast)",
+                "showTitle": true
+              }
+            }
+          },
+          "position": {
+            "x": 3,
+            "y": 1,
+            "width": 3,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "kpi_fva",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_kpis",
+                  "fields": [
+                    {
+                      "name": "sum(forecast_value_add_pts)",
+                      "expression": "SUM(`forecast_value_add_pts`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "sum(forecast_value_add_pts)",
+                  "displayName": "Value add vs naive (pts)"
+                }
+              },
+              "frame": {
+                "title": "Value add vs naive (pts)",
+                "showTitle": true
+              }
+            }
+          },
+          "position": {
+            "x": 6,
+            "y": 1,
+            "width": 3,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "kpi_total",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_kpis",
+                  "fields": [
+                    {
+                      "name": "sum(total_forecast_qty_104w)",
+                      "expression": "SUM(`total_forecast_qty_104w`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "sum(total_forecast_qty_104w)",
+                  "displayName": "Total forecast, 104 weeks"
+                }
+              },
+              "frame": {
+                "title": "Total forecast, 104 weeks",
+                "showTitle": true
+              }
+            }
+          },
+          "position": {
+            "x": 9,
+            "y": 1,
+            "width": 3,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "kpi_skus",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_kpis",
+                  "fields": [
+                    {
+                      "name": "sum(active_skus)",
+                      "expression": "SUM(`active_skus`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "sum(active_skus)",
+                  "displayName": "Active SKUs"
+                }
+              },
+              "frame": {
+                "title": "Active SKUs",
+                "showTitle": true
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 4,
+            "width": 6,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "kpi_action",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_kpis",
+                  "fields": [
+                    {
+                      "name": "sum(skus_needing_action)",
+                      "expression": "SUM(`skus_needing_action`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "sum(skus_needing_action)",
+                  "displayName": "SKUs needing action"
+                }
+              },
+              "frame": {
+                "title": "SKUs needing action",
+                "showTitle": true
+              }
+            }
+          },
+          "position": {
+            "x": 6,
+            "y": 4,
+            "width": 6,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "chart_trend",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_trend",
+                  "fields": [
+                    {
+                      "name": "week",
+                      "expression": "`week`"
+                    },
+                    {
+                      "name": "sum(units)",
+                      "expression": "SUM(`units`)"
+                    },
+                    {
+                      "name": "series",
+                      "expression": "`series`"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "line",
+              "encodings": {
+                "x": {
+                  "fieldName": "week",
+                  "scale": {
+                    "type": "temporal"
+                  },
+                  "displayName": "week"
+                },
+                "y": {
+                  "fieldName": "sum(units)",
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "displayName": "History vs forecast (P10 / P50 / P90)"
+                },
+                "color": {
+                  "fieldName": "series",
+                  "scale": {
+                    "type": "categorical"
+                  },
+                  "displayName": "series"
+                }
+              },
+              "frame": {
+                "title": "History vs forecast (P10 / P50 / P90)",
+                "showTitle": true
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 7,
+            "width": 12,
+            "height": 6
+          }
+        },
+        {
+          "widget": {
+            "name": "chart_cat",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_forecast",
+                  "fields": [
+                    {
+                      "name": "category",
+                      "expression": "`category`"
+                    },
+                    {
+                      "name": "sum(p50)",
+                      "expression": "SUM(`p50`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "bar",
+              "encodings": {
+                "x": {
+                  "fieldName": "category",
+                  "scale": {
+                    "type": "categorical"
+                  },
+                  "displayName": "category"
+                },
+                "y": {
+                  "fieldName": "sum(p50)",
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "displayName": "104-week forecast by category"
+                }
+              },
+              "frame": {
+                "title": "104-week forecast by category",
+                "showTitle": true
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 13,
+            "width": 6,
+            "height": 5
+          }
+        },
+        {
+          "widget": {
+            "name": "chart_region",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_forecast",
+                  "fields": [
+                    {
+                      "name": "region",
+                      "expression": "`region`"
+                    },
+                    {
+                      "name": "sum(p50)",
+                      "expression": "SUM(`p50`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "bar",
+              "encodings": {
+                "x": {
+                  "fieldName": "region",
+                  "scale": {
+                    "type": "categorical"
+                  },
+                  "displayName": "region"
+                },
+                "y": {
+                  "fieldName": "sum(p50)",
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "displayName": "104-week forecast by region"
+                }
+              },
+              "frame": {
+                "title": "104-week forecast by region",
+                "showTitle": true
+              }
+            }
+          },
+          "position": {
+            "x": 6,
+            "y": 13,
+            "width": 6,
+            "height": 5
+          }
+        }
+      ]
+    },
+    {
+      "name": "forecast",
+      "displayName": "2 \u00b7 Forecast",
+      "pageType": "PAGE_TYPE_CANVAS",
+      "layoutVersion": "GRID_V1",
+      "layout": [
+        {
+          "widget": {
+            "name": "chart_fc_cat",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_forecast",
+                  "fields": [
+                    {
+                      "name": "forecast_week",
+                      "expression": "`forecast_week`"
+                    },
+                    {
+                      "name": "sum(p50)",
+                      "expression": "SUM(`p50`)"
+                    },
+                    {
+                      "name": "category",
+                      "expression": "`category`"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "line",
+              "encodings": {
+                "x": {
+                  "fieldName": "forecast_week",
+                  "scale": {
+                    "type": "temporal"
+                  },
+                  "displayName": "forecast week"
+                },
+                "y": {
+                  "fieldName": "sum(p50)",
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "displayName": "Weekly forecast (P50) by category"
+                },
+                "color": {
+                  "fieldName": "category",
+                  "scale": {
+                    "type": "categorical"
+                  },
+                  "displayName": "category"
+                }
+              },
+              "frame": {
+                "title": "Weekly forecast (P50) by category",
+                "showTitle": true
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 0,
+            "width": 12,
+            "height": 6
+          }
+        },
+        {
+          "widget": {
+            "name": "chart_channel",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_forecast",
+                  "fields": [
+                    {
+                      "name": "channel",
+                      "expression": "`channel`"
+                    },
+                    {
+                      "name": "sum(p50)",
+                      "expression": "SUM(`p50`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "bar",
+              "encodings": {
+                "x": {
+                  "fieldName": "channel",
+                  "scale": {
+                    "type": "categorical"
+                  },
+                  "displayName": "channel"
+                },
+                "y": {
+                  "fieldName": "sum(p50)",
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "displayName": "Forecast by channel"
+                }
+              },
+              "frame": {
+                "title": "Forecast by channel",
+                "showTitle": true
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 6,
+            "width": 6,
+            "height": 5
+          }
+        },
+        {
+          "widget": {
+            "name": "chart_models",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_forecast",
+                  "fields": [
+                    {
+                      "name": "selected_model",
+                      "expression": "`selected_model`"
+                    },
+                    {
+                      "name": "count(series_key)",
+                      "expression": "COUNT(`series_key`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "bar",
+              "encodings": {
+                "x": {
+                  "fieldName": "selected_model",
+                  "scale": {
+                    "type": "categorical"
+                  },
+                  "displayName": "selected model"
+                },
+                "y": {
+                  "fieldName": "count(series_key)",
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "displayName": "Series per forecasting model"
+                }
+              },
+              "frame": {
+                "title": "Series per forecasting model",
+                "showTitle": true
+              }
+            }
+          },
+          "position": {
+            "x": 6,
+            "y": 6,
+            "width": 6,
+            "height": 5
+          }
+        },
+        {
+          "widget": {
+            "name": "tbl_sku_fc",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_sku_forecast",
+                  "fields": [
+                    {
+                      "name": "sku_id",
+                      "expression": "`sku_id`"
+                    },
+                    {
+                      "name": "category",
+                      "expression": "`category`"
+                    },
+                    {
+                      "name": "brand",
+                      "expression": "`brand`"
+                    },
+                    {
+                      "name": "region",
+                      "expression": "`region`"
+                    },
+                    {
+                      "name": "channel",
+                      "expression": "`channel`"
+                    },
+                    {
+                      "name": "selected_model",
+                      "expression": "`selected_model`"
+                    },
+                    {
+                      "name": "next_13_weeks",
+                      "expression": "`next_13_weeks`"
+                    },
+                    {
+                      "name": "next_52_weeks",
+                      "expression": "`next_52_weeks`"
+                    },
+                    {
+                      "name": "next_104_weeks",
+                      "expression": "`next_104_weeks`"
+                    },
+                    {
+                      "name": "segment_wape_pct",
+                      "expression": "`segment_wape_pct`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "table",
+              "encodings": {
+                "columns": [
+                  {
+                    "fieldName": "sku_id",
+                    "displayName": "sku id"
+                  },
+                  {
+                    "fieldName": "category",
+                    "displayName": "category"
+                  },
+                  {
+                    "fieldName": "brand",
+                    "displayName": "brand"
+                  },
+                  {
+                    "fieldName": "region",
+                    "displayName": "region"
+                  },
+                  {
+                    "fieldName": "channel",
+                    "displayName": "channel"
+                  },
+                  {
+                    "fieldName": "selected_model",
+                    "displayName": "selected model"
+                  },
+                  {
+                    "fieldName": "next_13_weeks",
+                    "displayName": "next 13 weeks"
+                  },
+                  {
+                    "fieldName": "next_52_weeks",
+                    "displayName": "next 52 weeks"
+                  },
+                  {
+                    "fieldName": "next_104_weeks",
+                    "displayName": "next 104 weeks"
+                  },
+                  {
+                    "fieldName": "segment_wape_pct",
+                    "displayName": "segment wape pct"
+                  }
+                ]
+              },
+              "frame": {
+                "title": "Forecast per SKU / region / channel",
+                "showTitle": true
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 11,
+            "width": 12,
+            "height": 7
+          }
+        }
+      ]
+    },
+    {
+      "name": "inventory",
+      "displayName": "3 \u00b7 Inventory risk",
+      "pageType": "PAGE_TYPE_CANVAS",
+      "layoutVersion": "GRID_V1",
+      "layout": [
+        {
+          "widget": {
+            "name": "kpi_high",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_inventory",
+                  "fields": [
+                    {
+                      "name": "sum(is_high_risk)",
+                      "expression": "SUM(`is_high_risk`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "sum(is_high_risk)",
+                  "displayName": "High stockout risk"
+                }
+              },
+              "frame": {
+                "title": "High stockout risk",
+                "showTitle": true
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 0,
+            "width": 4,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "kpi_medium",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_inventory",
+                  "fields": [
+                    {
+                      "name": "sum(is_medium_risk)",
+                      "expression": "SUM(`is_medium_risk`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "sum(is_medium_risk)",
+                  "displayName": "Medium risk \u2013 order now"
+                }
+              },
+              "frame": {
+                "title": "Medium risk \u2013 order now",
+                "showTitle": true
+              }
+            }
+          },
+          "position": {
+            "x": 4,
+            "y": 0,
+            "width": 4,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "kpi_excess",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_inventory",
+                  "fields": [
+                    {
+                      "name": "sum(is_excess)",
+                      "expression": "SUM(`is_excess`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "sum(is_excess)",
+                  "displayName": "Excess stock (> 120 days)"
+                }
+              },
+              "frame": {
+                "title": "Excess stock (> 120 days)",
+                "showTitle": true
+              }
+            }
+          },
+          "position": {
+            "x": 8,
+            "y": 0,
+            "width": 4,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "chart_dos",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_inventory",
+                  "fields": [
+                    {
+                      "name": "category",
+                      "expression": "`category`"
+                    },
+                    {
+                      "name": "avg(days_of_supply)",
+                      "expression": "AVG(`days_of_supply`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "bar",
+              "encodings": {
+                "x": {
+                  "fieldName": "category",
+                  "scale": {
+                    "type": "categorical"
+                  },
+                  "displayName": "category"
+                },
+                "y": {
+                  "fieldName": "avg(days_of_supply)",
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "displayName": "Average days of supply by category"
+                }
+              },
+              "frame": {
+                "title": "Average days of supply by category",
+                "showTitle": true
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 3,
+            "width": 6,
+            "height": 5
+          }
+        },
+        {
+          "widget": {
+            "name": "chart_order",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_inventory",
+                  "fields": [
+                    {
+                      "name": "category",
+                      "expression": "`category`"
+                    },
+                    {
+                      "name": "sum(suggested_order_qty)",
+                      "expression": "SUM(`suggested_order_qty`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "bar",
+              "encodings": {
+                "x": {
+                  "fieldName": "category",
+                  "scale": {
+                    "type": "categorical"
+                  },
+                  "displayName": "category"
+                },
+                "y": {
+                  "fieldName": "sum(suggested_order_qty)",
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "displayName": "Suggested order quantity by category"
+                }
+              },
+              "frame": {
+                "title": "Suggested order quantity by category",
+                "showTitle": true
+              }
+            }
+          },
+          "position": {
+            "x": 6,
+            "y": 3,
+            "width": 6,
+            "height": 5
+          }
+        },
+        {
+          "widget": {
+            "name": "chart_proj",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_projection",
+                  "fields": [
+                    {
+                      "name": "forecast_week",
+                      "expression": "`forecast_week`"
+                    },
+                    {
+                      "name": "sum(projected_stock)",
+                      "expression": "SUM(`projected_stock`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "line",
+              "encodings": {
+                "x": {
+                  "fieldName": "forecast_week",
+                  "scale": {
+                    "type": "temporal"
+                  },
+                  "displayName": "forecast week"
+                },
+                "y": {
+                  "fieldName": "sum(projected_stock)",
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "displayName": "Projected stock vs forecast (filter one SKU / region)"
+                }
+              },
+              "frame": {
+                "title": "Projected stock vs forecast (filter one SKU / region)",
+                "showTitle": true
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 8,
+            "width": 12,
+            "height": 5
+          }
+        },
+        {
+          "widget": {
+            "name": "tbl_risk",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_inventory",
+                  "fields": [
+                    {
+                      "name": "sku_id",
+                      "expression": "`sku_id`"
+                    },
+                    {
+                      "name": "region",
+                      "expression": "`region`"
+                    },
+                    {
+                      "name": "category",
+                      "expression": "`category`"
+                    },
+                    {
+                      "name": "stockout_risk",
+                      "expression": "`stockout_risk`"
+                    },
+                    {
+                      "name": "days_of_supply",
+                      "expression": "`days_of_supply`"
+                    },
+                    {
+                      "name": "first_stockout_week",
+                      "expression": "`first_stockout_week`"
+                    },
+                    {
+                      "name": "safety_stock",
+                      "expression": "`safety_stock`"
+                    },
+                    {
+                      "name": "reorder_point",
+                      "expression": "`reorder_point`"
+                    },
+                    {
+                      "name": "suggested_order_qty",
+                      "expression": "`suggested_order_qty`"
+                    },
+                    {
+                      "name": "excess_units",
+                      "expression": "`excess_units`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "table",
+              "encodings": {
+                "columns": [
+                  {
+                    "fieldName": "sku_id",
+                    "displayName": "sku id"
+                  },
+                  {
+                    "fieldName": "region",
+                    "displayName": "region"
+                  },
+                  {
+                    "fieldName": "category",
+                    "displayName": "category"
+                  },
+                  {
+                    "fieldName": "stockout_risk",
+                    "displayName": "stockout risk"
+                  },
+                  {
+                    "fieldName": "days_of_supply",
+                    "displayName": "days of supply"
+                  },
+                  {
+                    "fieldName": "first_stockout_week",
+                    "displayName": "first stockout week"
+                  },
+                  {
+                    "fieldName": "safety_stock",
+                    "displayName": "safety stock"
+                  },
+                  {
+                    "fieldName": "reorder_point",
+                    "displayName": "reorder point"
+                  },
+                  {
+                    "fieldName": "suggested_order_qty",
+                    "displayName": "suggested order qty"
+                  },
+                  {
+                    "fieldName": "excess_units",
+                    "displayName": "excess units"
+                  }
+                ]
+              },
+              "frame": {
+                "title": "Stock position and replenishment suggestion",
+                "showTitle": true
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 13,
+            "width": 12,
+            "height": 7
+          }
+        }
+      ]
+    },
+    {
+      "name": "accuracy",
+      "displayName": "4 \u00b7 Accuracy & models",
+      "pageType": "PAGE_TYPE_CANVAS",
+      "layoutVersion": "GRID_V1",
+      "layout": [
+        {
+          "widget": {
+            "name": "chart_wape_model",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_acc_model",
+                  "fields": [
+                    {
+                      "name": "model",
+                      "expression": "`model`"
+                    },
+                    {
+                      "name": "sum(wape_pct)",
+                      "expression": "SUM(`wape_pct`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "bar",
+              "encodings": {
+                "x": {
+                  "fieldName": "model",
+                  "scale": {
+                    "type": "categorical"
+                  },
+                  "displayName": "model"
+                },
+                "y": {
+                  "fieldName": "sum(wape_pct)",
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "displayName": "WAPE % by model (same backtest rows)"
+                }
+              },
+              "frame": {
+                "title": "WAPE % by model (same backtest rows)",
+                "showTitle": true
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 0,
+            "width": 6,
+            "height": 5
+          }
+        },
+        {
+          "widget": {
+            "name": "chart_bias_model",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_acc_model",
+                  "fields": [
+                    {
+                      "name": "model",
+                      "expression": "`model`"
+                    },
+                    {
+                      "name": "sum(bias_pct)",
+                      "expression": "SUM(`bias_pct`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "bar",
+              "encodings": {
+                "x": {
+                  "fieldName": "model",
+                  "scale": {
+                    "type": "categorical"
+                  },
+                  "displayName": "model"
+                },
+                "y": {
+                  "fieldName": "sum(bias_pct)",
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "displayName": "Bias % by model"
+                }
+              },
+              "frame": {
+                "title": "Bias % by model",
+                "showTitle": true
+              }
+            }
+          },
+          "position": {
+            "x": 6,
+            "y": 0,
+            "width": 6,
+            "height": 5
+          }
+        },
+        {
+          "widget": {
+            "name": "chart_wape_h",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_acc_horizon",
+                  "fields": [
+                    {
+                      "name": "horizon_bucket",
+                      "expression": "`horizon_bucket`"
+                    },
+                    {
+                      "name": "sum(wape_pct)",
+                      "expression": "SUM(`wape_pct`)"
+                    },
+                    {
+                      "name": "model",
+                      "expression": "`model`"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "bar",
+              "encodings": {
+                "x": {
+                  "fieldName": "horizon_bucket",
+                  "scale": {
+                    "type": "categorical"
+                  },
+                  "displayName": "horizon bucket"
+                },
+                "y": {
+                  "fieldName": "sum(wape_pct)",
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "displayName": "WAPE % by horizon (weeks ahead)"
+                },
+                "color": {
+                  "fieldName": "model",
+                  "scale": {
+                    "type": "categorical"
+                  },
+                  "displayName": "model"
+                }
+              },
+              "frame": {
+                "title": "WAPE % by horizon (weeks ahead)",
+                "showTitle": true
+              },
+              "mark": {
+                "layout": "group"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 5,
+            "width": 12,
+            "height": 5
+          }
+        },
+        {
+          "widget": {
+            "name": "tbl_selection",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_selection",
+                  "fields": [
+                    {
+                      "name": "segment",
+                      "expression": "`segment`"
+                    },
+                    {
+                      "name": "selected_model",
+                      "expression": "`selected_model`"
+                    },
+                    {
+                      "name": "wape_pct",
+                      "expression": "`wape_pct`"
+                    },
+                    {
+                      "name": "naive_wape_pct",
+                      "expression": "`naive_wape_pct`"
+                    },
+                    {
+                      "name": "value_add_pts",
+                      "expression": "`value_add_pts`"
+                    },
+                    {
+                      "name": "bias_pct",
+                      "expression": "`bias_pct`"
+                    },
+                    {
+                      "name": "review_flag",
+                      "expression": "`review_flag`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "table",
+              "encodings": {
+                "columns": [
+                  {
+                    "fieldName": "segment",
+                    "displayName": "segment"
+                  },
+                  {
+                    "fieldName": "selected_model",
+                    "displayName": "selected model"
+                  },
+                  {
+                    "fieldName": "wape_pct",
+                    "displayName": "wape pct"
+                  },
+                  {
+                    "fieldName": "naive_wape_pct",
+                    "displayName": "naive wape pct"
+                  },
+                  {
+                    "fieldName": "value_add_pts",
+                    "displayName": "value add pts"
+                  },
+                  {
+                    "fieldName": "bias_pct",
+                    "displayName": "bias pct"
+                  },
+                  {
+                    "fieldName": "review_flag",
+                    "displayName": "review flag"
+                  }
+                ]
+              },
+              "frame": {
+                "title": "Winning model per segment",
+                "showTitle": true
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 10,
+            "width": 12,
+            "height": 7
+          }
+        }
+      ]
+    },
+    {
+      "name": "anomalies",
+      "displayName": "5 \u00b7 Anomalies",
+      "pageType": "PAGE_TYPE_CANVAS",
+      "layoutVersion": "GRID_V1",
+      "layout": [
+        {
+          "widget": {
+            "name": "chart_reasons",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_anomalies",
+                  "fields": [
+                    {
+                      "name": "outlier_reason",
+                      "expression": "`outlier_reason`"
+                    },
+                    {
+                      "name": "count(actual_demand_raw)",
+                      "expression": "COUNT(`actual_demand_raw`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "bar",
+              "encodings": {
+                "x": {
+                  "fieldName": "outlier_reason",
+                  "scale": {
+                    "type": "categorical"
+                  },
+                  "displayName": "outlier reason"
+                },
+                "y": {
+                  "fieldName": "count(actual_demand_raw)",
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "displayName": "Flagged weeks by reason"
+                }
+              },
+              "frame": {
+                "title": "Flagged weeks by reason",
+                "showTitle": true
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 0,
+            "width": 12,
+            "height": 5
+          }
+        },
+        {
+          "widget": {
+            "name": "tbl_anomalies",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_anomalies",
+                  "fields": [
+                    {
+                      "name": "week",
+                      "expression": "`week`"
+                    },
+                    {
+                      "name": "sku_id",
+                      "expression": "`sku_id`"
+                    },
+                    {
+                      "name": "region",
+                      "expression": "`region`"
+                    },
+                    {
+                      "name": "channel",
+                      "expression": "`channel`"
+                    },
+                    {
+                      "name": "actual_demand_raw",
+                      "expression": "`actual_demand_raw`"
+                    },
+                    {
+                      "name": "expected_demand",
+                      "expression": "`expected_demand`"
+                    },
+                    {
+                      "name": "actual_demand_clean",
+                      "expression": "`actual_demand_clean`"
+                    },
+                    {
+                      "name": "robust_z",
+                      "expression": "`robust_z`"
+                    },
+                    {
+                      "name": "outlier_reason",
+                      "expression": "`outlier_reason`"
+                    },
+                    {
+                      "name": "treatment_method",
+                      "expression": "`treatment_method`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "table",
+              "encodings": {
+                "columns": [
+                  {
+                    "fieldName": "week",
+                    "displayName": "week"
+                  },
+                  {
+                    "fieldName": "sku_id",
+                    "displayName": "sku id"
+                  },
+                  {
+                    "fieldName": "region",
+                    "displayName": "region"
+                  },
+                  {
+                    "fieldName": "channel",
+                    "displayName": "channel"
+                  },
+                  {
+                    "fieldName": "actual_demand_raw",
+                    "displayName": "actual demand raw"
+                  },
+                  {
+                    "fieldName": "expected_demand",
+                    "displayName": "expected demand"
+                  },
+                  {
+                    "fieldName": "actual_demand_clean",
+                    "displayName": "actual demand clean"
+                  },
+                  {
+                    "fieldName": "robust_z",
+                    "displayName": "robust z"
+                  },
+                  {
+                    "fieldName": "outlier_reason",
+                    "displayName": "outlier reason"
+                  },
+                  {
+                    "fieldName": "treatment_method",
+                    "displayName": "treatment method"
+                  }
+                ]
+              },
+              "frame": {
+                "title": "Outliers \u2013 raw vs cleaned demand",
+                "showTitle": true
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 5,
+            "width": 12,
+            "height": 7
+          }
+        }
+      ]
+    },
+    {
+      "name": "insights",
+      "displayName": "6 \u00b7 Insights",
+      "pageType": "PAGE_TYPE_CANVAS",
+      "layoutVersion": "GRID_V1",
+      "layout": [
+        {
+          "widget": {
+            "name": "txt_insights",
+            "multilineTextboxSpec": {
+              "lines": [
+                "Every insight below is calculated with SQL from the forecast, inventory and model tables \u2013 nothing is invented."
+              ]
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 0,
+            "width": 12,
+            "height": 1
+          }
+        },
+        {
+          "widget": {
+            "name": "chart_insights",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_insights",
+                  "fields": [
+                    {
+                      "name": "insight",
+                      "expression": "`insight`"
+                    },
+                    {
+                      "name": "count(sku_id)",
+                      "expression": "COUNT(`sku_id`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "bar",
+              "encodings": {
+                "x": {
+                  "fieldName": "insight",
+                  "scale": {
+                    "type": "categorical"
+                  },
+                  "displayName": "insight"
+                },
+                "y": {
+                  "fieldName": "count(sku_id)",
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "displayName": "Insights by type"
+                }
+              },
+              "frame": {
+                "title": "Insights by type",
+                "showTitle": true
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 1,
+            "width": 12,
+            "height": 5
+          }
+        },
+        {
+          "widget": {
+            "name": "tbl_insights",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_insights",
+                  "fields": [
+                    {
+                      "name": "insight",
+                      "expression": "`insight`"
+                    },
+                    {
+                      "name": "sku_id",
+                      "expression": "`sku_id`"
+                    },
+                    {
+                      "name": "region",
+                      "expression": "`region`"
+                    },
+                    {
+                      "name": "metric",
+                      "expression": "`metric`"
+                    },
+                    {
+                      "name": "detail",
+                      "expression": "`detail`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "table",
+              "encodings": {
+                "columns": [
+                  {
+                    "fieldName": "insight",
+                    "displayName": "insight"
+                  },
+                  {
+                    "fieldName": "sku_id",
+                    "displayName": "sku id"
+                  },
+                  {
+                    "fieldName": "region",
+                    "displayName": "region"
+                  },
+                  {
+                    "fieldName": "metric",
+                    "displayName": "metric"
+                  },
+                  {
+                    "fieldName": "detail",
+                    "displayName": "detail"
+                  }
+                ]
+              },
+              "frame": {
+                "title": "Planner insights",
+                "showTitle": true
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 6,
+            "width": 12,
+            "height": 8
+          }
+        }
+      ]
+    },
+    {
+      "name": "global_filters",
+      "displayName": "Filters",
+      "pageType": "PAGE_TYPE_GLOBAL_FILTERS",
+      "layoutVersion": "GRID_V1",
+      "layout": [
+        {
+          "widget": {
+            "name": "f_category",
+            "queries": [
+              {
+                "name": "ds_trend_category",
+                "query": {
+                  "datasetName": "ds_trend",
+                  "fields": [
+                    {
+                      "name": "category",
+                      "expression": "`category`"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "ds_forecast_category",
+                "query": {
+                  "datasetName": "ds_forecast",
+                  "fields": [
+                    {
+                      "name": "category",
+                      "expression": "`category`"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "ds_sku_forecast_category",
+                "query": {
+                  "datasetName": "ds_sku_forecast",
+                  "fields": [
+                    {
+                      "name": "category",
+                      "expression": "`category`"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "ds_inventory_category",
+                "query": {
+                  "datasetName": "ds_inventory",
+                  "fields": [
+                    {
+                      "name": "category",
+                      "expression": "`category`"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "ds_projection_category",
+                "query": {
+                  "datasetName": "ds_projection",
+                  "fields": [
+                    {
+                      "name": "category",
+                      "expression": "`category`"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "ds_anomalies_category",
+                "query": {
+                  "datasetName": "ds_anomalies",
+                  "fields": [
+                    {
+                      "name": "category",
+                      "expression": "`category`"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "filter-multi-select",
+              "encodings": {
+                "fields": [
+                  {
+                    "fieldName": "category",
+                    "displayName": "Category",
+                    "queryName": "ds_trend_category"
+                  },
+                  {
+                    "fieldName": "category",
+                    "displayName": "Category",
+                    "queryName": "ds_forecast_category"
+                  },
+                  {
+                    "fieldName": "category",
+                    "displayName": "Category",
+                    "queryName": "ds_sku_forecast_category"
+                  },
+                  {
+                    "fieldName": "category",
+                    "displayName": "Category",
+                    "queryName": "ds_inventory_category"
+                  },
+                  {
+                    "fieldName": "category",
+                    "displayName": "Category",
+                    "queryName": "ds_projection_category"
+                  },
+                  {
+                    "fieldName": "category",
+                    "displayName": "Category",
+                    "queryName": "ds_anomalies_category"
+                  }
+                ]
+              },
+              "frame": {
+                "title": "Category",
+                "showTitle": true
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 0,
+            "width": 3,
+            "height": 2
+          }
+        },
+        {
+          "widget": {
+            "name": "f_region",
+            "queries": [
+              {
+                "name": "ds_trend_region",
+                "query": {
+                  "datasetName": "ds_trend",
+                  "fields": [
+                    {
+                      "name": "region",
+                      "expression": "`region`"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "ds_forecast_region",
+                "query": {
+                  "datasetName": "ds_forecast",
+                  "fields": [
+                    {
+                      "name": "region",
+                      "expression": "`region`"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "ds_sku_forecast_region",
+                "query": {
+                  "datasetName": "ds_sku_forecast",
+                  "fields": [
+                    {
+                      "name": "region",
+                      "expression": "`region`"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "ds_inventory_region",
+                "query": {
+                  "datasetName": "ds_inventory",
+                  "fields": [
+                    {
+                      "name": "region",
+                      "expression": "`region`"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "ds_projection_region",
+                "query": {
+                  "datasetName": "ds_projection",
+                  "fields": [
+                    {
+                      "name": "region",
+                      "expression": "`region`"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "ds_anomalies_region",
+                "query": {
+                  "datasetName": "ds_anomalies",
+                  "fields": [
+                    {
+                      "name": "region",
+                      "expression": "`region`"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "ds_insights_region",
+                "query": {
+                  "datasetName": "ds_insights",
+                  "fields": [
+                    {
+                      "name": "region",
+                      "expression": "`region`"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "filter-multi-select",
+              "encodings": {
+                "fields": [
+                  {
+                    "fieldName": "region",
+                    "displayName": "Region",
+                    "queryName": "ds_trend_region"
+                  },
+                  {
+                    "fieldName": "region",
+                    "displayName": "Region",
+                    "queryName": "ds_forecast_region"
+                  },
+                  {
+                    "fieldName": "region",
+                    "displayName": "Region",
+                    "queryName": "ds_sku_forecast_region"
+                  },
+                  {
+                    "fieldName": "region",
+                    "displayName": "Region",
+                    "queryName": "ds_inventory_region"
+                  },
+                  {
+                    "fieldName": "region",
+                    "displayName": "Region",
+                    "queryName": "ds_projection_region"
+                  },
+                  {
+                    "fieldName": "region",
+                    "displayName": "Region",
+                    "queryName": "ds_anomalies_region"
+                  },
+                  {
+                    "fieldName": "region",
+                    "displayName": "Region",
+                    "queryName": "ds_insights_region"
+                  }
+                ]
+              },
+              "frame": {
+                "title": "Region",
+                "showTitle": true
+              }
+            }
+          },
+          "position": {
+            "x": 3,
+            "y": 0,
+            "width": 3,
+            "height": 2
+          }
+        },
+        {
+          "widget": {
+            "name": "f_channel",
+            "queries": [
+              {
+                "name": "ds_trend_channel",
+                "query": {
+                  "datasetName": "ds_trend",
+                  "fields": [
+                    {
+                      "name": "channel",
+                      "expression": "`channel`"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "ds_forecast_channel",
+                "query": {
+                  "datasetName": "ds_forecast",
+                  "fields": [
+                    {
+                      "name": "channel",
+                      "expression": "`channel`"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "ds_sku_forecast_channel",
+                "query": {
+                  "datasetName": "ds_sku_forecast",
+                  "fields": [
+                    {
+                      "name": "channel",
+                      "expression": "`channel`"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "ds_anomalies_channel",
+                "query": {
+                  "datasetName": "ds_anomalies",
+                  "fields": [
+                    {
+                      "name": "channel",
+                      "expression": "`channel`"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "filter-multi-select",
+              "encodings": {
+                "fields": [
+                  {
+                    "fieldName": "channel",
+                    "displayName": "Channel",
+                    "queryName": "ds_trend_channel"
+                  },
+                  {
+                    "fieldName": "channel",
+                    "displayName": "Channel",
+                    "queryName": "ds_forecast_channel"
+                  },
+                  {
+                    "fieldName": "channel",
+                    "displayName": "Channel",
+                    "queryName": "ds_sku_forecast_channel"
+                  },
+                  {
+                    "fieldName": "channel",
+                    "displayName": "Channel",
+                    "queryName": "ds_anomalies_channel"
+                  }
+                ]
+              },
+              "frame": {
+                "title": "Channel",
+                "showTitle": true
+              }
+            }
+          },
+          "position": {
+            "x": 6,
+            "y": 0,
+            "width": 3,
+            "height": 2
+          }
+        },
+        {
+          "widget": {
+            "name": "f_sku",
+            "queries": [
+              {
+                "name": "ds_forecast_sku_id",
+                "query": {
+                  "datasetName": "ds_forecast",
+                  "fields": [
+                    {
+                      "name": "sku_id",
+                      "expression": "`sku_id`"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "ds_sku_forecast_sku_id",
+                "query": {
+                  "datasetName": "ds_sku_forecast",
+                  "fields": [
+                    {
+                      "name": "sku_id",
+                      "expression": "`sku_id`"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "ds_inventory_sku_id",
+                "query": {
+                  "datasetName": "ds_inventory",
+                  "fields": [
+                    {
+                      "name": "sku_id",
+                      "expression": "`sku_id`"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "ds_projection_sku_id",
+                "query": {
+                  "datasetName": "ds_projection",
+                  "fields": [
+                    {
+                      "name": "sku_id",
+                      "expression": "`sku_id`"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "ds_anomalies_sku_id",
+                "query": {
+                  "datasetName": "ds_anomalies",
+                  "fields": [
+                    {
+                      "name": "sku_id",
+                      "expression": "`sku_id`"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "ds_insights_sku_id",
+                "query": {
+                  "datasetName": "ds_insights",
+                  "fields": [
+                    {
+                      "name": "sku_id",
+                      "expression": "`sku_id`"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "filter-multi-select",
+              "encodings": {
+                "fields": [
+                  {
+                    "fieldName": "sku_id",
+                    "displayName": "SKU",
+                    "queryName": "ds_forecast_sku_id"
+                  },
+                  {
+                    "fieldName": "sku_id",
+                    "displayName": "SKU",
+                    "queryName": "ds_sku_forecast_sku_id"
+                  },
+                  {
+                    "fieldName": "sku_id",
+                    "displayName": "SKU",
+                    "queryName": "ds_inventory_sku_id"
+                  },
+                  {
+                    "fieldName": "sku_id",
+                    "displayName": "SKU",
+                    "queryName": "ds_projection_sku_id"
+                  },
+                  {
+                    "fieldName": "sku_id",
+                    "displayName": "SKU",
+                    "queryName": "ds_anomalies_sku_id"
+                  },
+                  {
+                    "fieldName": "sku_id",
+                    "displayName": "SKU",
+                    "queryName": "ds_insights_sku_id"
+                  }
+                ]
+              },
+              "frame": {
+                "title": "SKU",
+                "showTitle": true
+              }
+            }
+          },
+          "position": {
+            "x": 9,
+            "y": 0,
+            "width": 3,
+            "height": 2
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1,4 +1,11 @@
-# Building the 5-page AI/BI dashboard (about 30 minutes, no code)
+# The Demand Planning AI/BI dashboard
+
+**Automatic (recommended):** run `src/12_create_dashboard`. It creates and publishes the dashboard from
+`dashboard/demand_planning.lvdash.json` and prints the link. To change the dashboard, edit
+`dashboard/build_dashboard.py`, run `python dashboard/build_dashboard.py`, commit, and re-run notebook 12 (it updates
+the existing dashboard).
+
+**Manual alternative (for learning the tool, about 30 minutes, no code):**
 
 All data comes from views made by `11_dashboard_governance` in `demand_planning.forecast`.
 

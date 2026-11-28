@@ -62,3 +62,6 @@ resources:
         - task_key: t11_dashboard_governance
           depends_on: [{task_key: t10_inventory_monitoring}]
           notebook_task: {notebook_path: ../src/11_dashboard_governance.py}
+        - task_key: t12_create_dashboard
+          depends_on: [{task_key: t11_dashboard_governance}]
+          notebook_task: {notebook_path: ../src/12_create_dashboard.py}

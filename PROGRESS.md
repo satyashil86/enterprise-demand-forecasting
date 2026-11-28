@@ -12,7 +12,7 @@ Status key: ✅ passed on Databricks · 🟡 built and passed end-to-end on loca
 | 6 | Models + rolling backtest + WAPE selection | `08_models_backtest` | 🟡 | Local: LightGBM 34.7% WAPE, XGBoost 34.7%, RF 39.4%, MSTL-ARIMA 47.0%, Seasonal Naive 51.4% (FVA ≈ 17 pts); winners per segment: 9 LightGBM, 7 XGBoost, 3 RF, 1 SN. |
 | 7 | 104-week forecast, P10/P50/P90 | `09_forecast` | 🟡 | Local: 594 active series × 104 weeks; P10–P90 coverage on the held-out origin 81% (target 80%). |
 | 8 | Inventory risk + monitoring | `10_inventory_monitoring` | 🟡 | Local: 222 SKU-regions (10 high, 52 medium stockout risk, 14 excess); health-check table. |
-| 9 | Dashboard views + governance | `11_dashboard_governance` + `docs/dashboard_guide.md` | 🟡 | Local: 7 dashboard views and grounded insights. GRANTs, the secure view and system tables only run on Databricks. |
+| 9 | Dashboard views + governance + dashboard | `11_dashboard_governance`, `12_create_dashboard`, `dashboard/` | 🟡 | 11: `PHASE 9 ... PASSED` on Databricks (28-Nov-2026); grants pending group creation. 12: dashboard as code (6 pages, 34 widgets, 11 datasets, global filters); all 11 queries tested locally, needs a Databricks run. |
 | 10 | Orchestration, CI/CD, Azure | `resources/pipeline_job.yml`, `.github/workflows/deploy.yml`, `docs/azure_integration.md` | 🟡 | One job with 12 tasks, dependencies and retries; deploy workflow (dev on push, prod with approval); Azure guide. |
 
 ## How to run phases 6–10 on Databricks
