@@ -37,5 +37,5 @@ Status key: ✅ passed on Databricks · 🟡 built and passed end-to-end on loca
 Plain PySpark notebooks with short explanations and `assert` checks. One small shared helper (`dfp/forecasting.py`) is used by notebooks 08 and 09.
 
 ## Open items
-- TimeGPT: an optional cell that runs only if a Nixtla key is stored as a secret and outbound access is allowed.
+- TimeGPT: a full 6th model. It runs on all series with ≥ 52 weeks of history, one API call per origin (≈3 calls for the backtest, 1 for the forecast), with planned promotion/price/calendar as `X_df`, `timegpt-1-long-horizon` and native 80% intervals. Needs the `nixtla_api_key` secret. Databricks Free Edition reached the Nixtla API (a 401 came back for the first key, so outbound access works).
 - Workspace groups must be created by an admin before the GRANTs apply.

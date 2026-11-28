@@ -14,7 +14,7 @@
 
 # COMMAND ----------
 
-# MAGIC %pip install lightgbm xgboost statsforecast --quiet
+# MAGIC %pip install lightgbm xgboost statsforecast nixtla --quiet
 
 # COMMAND ----------
 
@@ -137,6 +137,17 @@ if "seasonal_naive" in needed:
 if "mstl_arima" in needed:
     ar = fc.mstl_arima(hist, LAST, HORIZON)
     preds["mstl_arima"] = rows[fc.KEYS + ["wi"]].merge(ar, on=fc.KEYS + ["wi"], how="left")["forecast"].to_numpy()
+
+if "timegpt" in needed:                                  # 1 API call for all series that need it
+    try:
+        from nixtla import NixtlaClient
+        key = dbutils.secrets.get("demand_planning_dev", "nixtla_api_key").strip().strip('"').strip("'")
+        tg = fc.timegpt_forecast(NixtlaClient(api_key=key), hist, fut, LAST, HORIZON)
+        preds["timegpt"] = rows[fc.KEYS + ["week_start"]].merge(tg, on=fc.KEYS + ["week_start"], how="left")["forecast"].to_numpy()
+        print(f"TimeGPT (long-horizon) forecast {tg[fc.KEYS].drop_duplicates().shape[0]} series in one call")
+    except Exception as e:
+        print(f"TimeGPT unavailable ({type(e).__name__}) -> its segments use the fallback model")
+        preds["timegpt"] = np.full(len(rows), np.nan)
 
 chosen = np.array([preds[m][i] for i, m in enumerate(rows["selected_model"])], dtype=float)
 use_fallback = np.isnan(chosen)

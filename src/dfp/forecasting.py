@@ -134,6 +134,45 @@ def mstl_arima(hist: pd.DataFrame, origin_wi: int, h: int, min_weeks: int = 104)
     return fc[KEYS + ["wi"]].assign(forecast=np.clip(fc["MSTL"].to_numpy(), 0, None))
 
 
+TIMEGPT_EXOG = ["promo_flag", "discount_pct", "current_price", "holiday_days", "festival_days"]   # known in advance
+
+
+def timegpt_forecast(client, hist: pd.DataFrame, targets: pd.DataFrame, origin_wi: int, h: int,
+                     level: int = 80, model: str = "timegpt-1-long-horizon", min_weeks: int = 52) -> pd.DataFrame:
+    """TimeGPT for ALL series in ONE API request.
+
+    df   = history up to the origin (y + exogenous columns), one row per series-week
+    X_df = the next h weeks of the same exogenous columns (planned promotions, prices, calendar) - never y
+    Returns KEYS + week_start + forecast + TimeGPT's own lo/hi interval (level %).
+    """
+    def uid(d):
+        return d[KEYS].astype(str).agg("|".join, axis=1)
+
+    def exog(d):
+        out = pd.DataFrame({c: d[c].astype(float) for c in TIMEGPT_EXOG}, index=d.index)
+        out["current_price"] = out.groupby(uid(d))["current_price"].transform(lambda s: s.ffill().bfill())
+        return out.fillna(0.0)
+
+    known = hist[hist["wi"] <= origin_wi]
+    counts = known.groupby(KEYS)["wi"].transform("count")
+    known = known[counts >= min_weeks]                                  # enough history for a fair comparison
+    df = pd.concat([pd.DataFrame({"unique_id": uid(known), "ds": pd.to_datetime(known["week_start"]),
+                                  "y": known["y"].astype(float)}), exog(known)], axis=1)
+    fut = targets[(targets["wi"] > origin_wi) & (targets["wi"] <= origin_wi + h)]
+    fut = fut.merge(known[KEYS].drop_duplicates(), on=KEYS)
+    X = pd.concat([pd.DataFrame({"unique_id": uid(fut), "ds": pd.to_datetime(fut["week_start"])}), exog(fut)], axis=1)
+    full = X.groupby("unique_id").size()                              # X_df needs all h future weeks per series
+    keep = set(full[full == h].index)
+    df, X = df[df["unique_id"].isin(keep)], X[X["unique_id"].isin(keep)]
+    res = client.forecast(df=df, X_df=X, h=h, freq="W-MON", level=[level], model=model)
+    res[KEYS] = res["unique_id"].str.split("|", expand=True)
+    res["week_start"] = pd.to_datetime(res["ds"])
+    res = res.rename(columns={"TimeGPT": "forecast", f"TimeGPT-lo-{level}": "tg_lo", f"TimeGPT-hi-{level}": "tg_hi"})
+    for c in ("forecast", "tg_lo", "tg_hi"):
+        res[c] = np.clip(res[c].astype(float), 0, None)
+    return res[KEYS + ["week_start", "forecast", "tg_lo", "tg_hi"]]
+
+
 def metrics(df: pd.DataFrame, actual="actual", forecast="forecast") -> pd.Series:
     """WAPE % = sum|A-F| / sum A ; bias % = sum(F-A) / sum A (positive = over-forecast)."""
     a, f = df[actual], df[forecast]

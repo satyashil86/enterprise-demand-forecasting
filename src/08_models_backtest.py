@@ -11,7 +11,7 @@
 # MAGIC | LightGBM | machine learning | one global model for all series, uses promotions/price/calendar |
 # MAGIC | XGBoost | machine learning | same features, different algorithm |
 # MAGIC | Random Forest | machine learning | small add-on for comparison |
-# MAGIC | TimeGPT | foundation model | optional – paid API, small sample, only if a key is configured |
+# MAGIC | TimeGPT | foundation model | all series, 1 API call per origin, with planned promotions/prices as exogenous inputs (needs a Nixtla key) |
 # MAGIC
 # MAGIC **Rolling-origin backtest:** pretend it is an earlier date, train only on data up to then, forecast the following
 # MAGIC weeks, compare with what really happened. We do this for 3 origins, with **identical origins and actuals for every
@@ -22,7 +22,7 @@
 
 # COMMAND ----------
 
-# MAGIC %pip install lightgbm xgboost statsforecast --quiet
+# MAGIC %pip install lightgbm xgboost statsforecast nixtla --quiet
 
 # COMMAND ----------
 
@@ -88,17 +88,18 @@ display(tuning); print("chosen:", BEST)
 
 # COMMAND ----------
 
-# MAGIC %md ## 3. Rolling-origin backtest (3 origins × 6 models)
+# MAGIC %md ## 3. Rolling-origin backtest (3 origins × 5 local models; TimeGPT in step 4)
 
 # COMMAND ----------
 
 ORIGINS = [LAST - 52, LAST - 39, LAST - 26]          # e.g. weeks 103, 116, 129 -> forecast to the end of history
-results, durations = [], []
+results, durations, outs = [], [], {}
 for o in ORIGINS:
     h_max = LAST - o
     test = fc.build_rows(hist, hist, [o], h_max)
     train = fc.training_rows(hist, o)
     out = test[fc.KEYS + ["category", "wi", "week_start", "h"]].assign(fold_origin=o, actual=test["y"].to_numpy())
+    outs[o] = out                                      # kept so TimeGPT is scored on exactly the same rows
 
     results.append(out.assign(model="seasonal_naive", forecast=test["seasonal_lag"].to_numpy()))
     for name, model in fc.make_models(BEST).items():
@@ -111,38 +112,53 @@ for o in ORIGINS:
     results.append(out.merge(ar, on=fc.KEYS + ["wi"], how="left").assign(model="mstl_arima"))
     print(f"origin {o}: {len(test):,} test rows, {len(train):,} training rows")
 
-bt = pd.concat(results, ignore_index=True)
-bt["horizon_bucket"] = fc.horizon_bucket(bt["h"])
-bt = bt.merge(segments, on=fc.KEYS, how="left")
-bt["segment"] = bt["category"] + " | " + bt["demand_class"].fillna("unknown")
-display(pd.DataFrame(durations, columns=["model", "fold_origin", "seconds", "training_rows"]))
+# COMMAND ----------
+
+# MAGIC %md ## 4. TimeGPT (Nixtla foundation model) — all series, same origins
+# MAGIC * **One API request per origin** carries all series → 3 calls for the backtest (cost is per call, not per series)
+# MAGIC * **Exogenous inputs** (`X_df`): planned promotion, discount, shelf price, holidays, festivals for the forecast weeks.
+# MAGIC   TimeGPT does not know about promotions unless we tell it – and we only pass information known in advance.
+# MAGIC * **`model="timegpt-1-long-horizon"`** – the variant for long horizons (we forecast up to 104 weeks)
+# MAGIC * **`level=[80]`** – TimeGPT returns its own 80% prediction interval; we check how often actuals fall inside
+# MAGIC
+# MAGIC Needs a key stored as a secret: `databricks secrets put-secret demand_planning_dev nixtla_api_key`.
+# MAGIC Without a key (or if the call fails) TimeGPT is skipped and everything else continues.
 
 # COMMAND ----------
 
-# MAGIC %md ## 4. (Optional) TimeGPT on a small sample — only if a Nixtla API key is stored as a secret
-# MAGIC Store the key once with the Databricks CLI: `databricks secrets put-secret demand_planning_dev nixtla_api_key`.
-# MAGIC Never paste keys into notebooks. Free Edition may block outbound calls; then this cell just reports "skipped".
-
-# COMMAND ----------
-
-timegpt_note = "skipped (no API key)"
+timegpt_note, tg_parts = "skipped (no API key)", []
 try:
-    key = dbutils.secrets.get("demand_planning_dev", "nixtla_api_key")
+    key = dbutils.secrets.get("demand_planning_dev", "nixtla_api_key").strip().strip('"').strip("'")
 except Exception:
     key = None
 if key:
     try:
         from nixtla import NixtlaClient
         client = NixtlaClient(api_key=key)
-        o = ORIGINS[-1]
-        sample = hist[[*fc.KEYS]].drop_duplicates().head(20)
-        known = hist[hist["wi"] <= o].merge(sample, on=fc.KEYS)
-        df_tg = pd.DataFrame({"unique_id": known[fc.KEYS].agg("|".join, axis=1), "ds": known["week_start"], "y": known["y"]})
-        tg = client.forecast(df=df_tg, h=LAST - o, freq="W-MON")
-        timegpt_note = f"ran on {tg['unique_id'].nunique()} series (compare manually with LightGBM on the same series)"
+        for o in ORIGINS:
+            t0 = time.time()
+            tg = fc.timegpt_forecast(client, hist, hist, o, LAST - o)
+            durations.append(("timegpt", o, time.time() - t0, 0))
+            tg_parts.append(outs[o].merge(tg, on=fc.KEYS + ["week_start"], how="left").assign(model="timegpt"))
+            print(f"origin {o}: TimeGPT forecast {tg[fc.KEYS].drop_duplicates().shape[0]} series in one call")
+        timegpt_note = f"ran on all eligible series for {len(ORIGINS)} origins ({len(ORIGINS)} API calls)"
     except Exception as e:
-        timegpt_note = f"skipped ({type(e).__name__}: {str(e)[:120]})"
+        tg_parts, timegpt_note = [], f"skipped ({type(e).__name__}: {str(e)[:150]})"
 print("TimeGPT:", timegpt_note)
+
+if tg_parts:
+    tg_bt = pd.concat(tg_parts, ignore_index=True).dropna(subset=["forecast"])
+    inside = ((tg_bt["actual"] >= tg_bt["tg_lo"]) & (tg_bt["actual"] <= tg_bt["tg_hi"])).mean()
+    print(f"TimeGPT's own 80% interval contained {inside:.1%} of actuals (well calibrated if close to 80%)")
+    results.append(pd.concat(tg_parts, ignore_index=True).drop(columns=["tg_lo", "tg_hi"]))
+
+# COMMAND ----------
+
+bt = pd.concat(results, ignore_index=True)
+bt["horizon_bucket"] = fc.horizon_bucket(bt["h"])
+bt = bt.merge(segments, on=fc.KEYS, how="left")
+bt["segment"] = bt["category"] + " | " + bt["demand_class"].fillna("unknown")
+display(pd.DataFrame(durations, columns=["model", "fold_origin", "seconds", "training_rows"]))
 
 # COMMAND ----------
 
@@ -220,8 +236,10 @@ to_spark(seg.assign(run_id=RUN_ID)).write.mode("overwrite").option("overwriteSch
      .saveAsTable(T("ml.model_comparison"))
 to_spark(selection.assign(run_id=RUN_ID, selection_timestamp=now)).write.mode("overwrite") \
      .option("overwriteSchema", "true").saveAsTable(T("ml.model_selection"))
+MODEL_PARAMS = {"lightgbm": BEST, "timegpt": {"model": "timegpt-1-long-horizon", "level": [80],
+                                              "exogenous": fc.TIMEGPT_EXOG, "note": timegpt_note}}
 registry = pd.DataFrame([{"model": m, "model_version": RUN_ID,
-                          "params": json.dumps(BEST if m == "lightgbm" else {}), "features": ",".join(fc.FEATURES),
+                          "params": json.dumps(MODEL_PARAMS.get(m, {})), "features": ",".join(fc.FEATURES),
                           "trained_at": now} for m in overall.index])
 spark.createDataFrame(registry).write.mode("overwrite").option("overwriteSchema", "true").saveAsTable(T("ml.model_registry"))
 print("saved: ml.backtest_results, ml.model_comparison, ml.model_selection, ml.model_registry")

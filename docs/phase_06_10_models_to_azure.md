@@ -1,7 +1,8 @@
 # Phases 6–10 in one page
 
 **08_models_backtest:** rolling-origin backtest (3 origins, horizons 1–52) for Seasonal Naive, MSTL + AutoARIMA,
-LightGBM, XGBoost and Random Forest (TimeGPT optional). Models are compared on exactly the same rows. Metrics are WAPE,
+LightGBM, XGBoost, Random Forest and TimeGPT (all series, 1 API call per origin, future exogenous `X_df`,
+long-horizon model, native 80% intervals; skipped automatically without a key). Models are compared on exactly the same rows. Metrics are WAPE,
 bias, MAE and RMSE, by model, horizon, category and segment. The winner per category × demand pattern is the lowest
 WAPE with |bias| ≤ 20%; "unstable" is flagged when WAPE jumps between origins; FVA = naive WAPE − winner WAPE.
 Tables: `ml.backtest_results`, `ml.model_comparison`, `ml.model_selection`, `ml.model_registry`.
