@@ -13,7 +13,7 @@ The project is built phase by phase. See [PROGRESS.md](PROGRESS.md) for status a
 
 ```
 databricks.yml              Asset Bundle (dev/prod targets)
-resources/                  Job definitions (serverless; Free Edition compatible)
+resources/pipeline_job.yml  One Lakeflow Job running notebooks 00-11 with dependencies and retries
 config/                     environment, source, schema, model and forecast configuration
 src/
   00_setup.py               Unity Catalog: catalog, 9 schemas, 4 volumes, audit tables
@@ -24,17 +24,22 @@ src/
   05_eda.py                 EDA: demand classes, seasonality, promo/price/weather effects, lifecycle, charts
   06_outliers.py            Spike detection (robust z, IQR, rolling median); genuine vs data error; cleaned demand
   07_features.py            Leakage-safe features: lags, rolling, seasonality, promo, price, POS lags, weather
+  08_models_backtest.py     Seasonal Naive, MSTL-ARIMA, LightGBM, XGBoost, RF (+TimeGPT optional); rolling backtest; WAPE selection
+  09_forecast.py            104-week forecast per series with P10/P50/P90 -> forecast.weekly_demand_forecast
+  10_inventory_monitoring.py Days of supply, stockout/excess risk, safety stock, order suggestion; health checks
+  11_dashboard_governance.py Views for the 5-page AI/BI dashboard; groups, GRANTs, row filter + column mask
   dfp/                      Shared library (pure Python where possible, unit-testable)
-    config.py  uc.py  audit.py  synthetic.py  synthetic_validation.py  ingestion.py  silver.py
+    config.py  uc.py  audit.py  synthetic.py  synthetic_validation.py  ingestion.py  silver.py  forecasting.py
 tests/                      pytest suite (runs locally and in CI)
 docs/                       Phase design notes
 .github/workflows/ci.yml    Unit tests on every push / PR
+.github/workflows/deploy.yml Bundle validate + deploy (dev on push, prod on approval)
 ```
 
 ## Quick start (Databricks Free Edition)
 
 1. Push this folder to a GitHub repo. In Databricks: **Workspace → Create → Git folder** and paste the repo URL.
-   (Or use the CLI: `databricks bundle deploy -t dev`, then `databricks bundle run -t dev dfp_foundation`.)
+   (Or use the CLI: `databricks bundle deploy -t dev`, then `databricks bundle run -t dev dfp_pipeline`.)
 2. Open `src/00_setup.py`, attach **Serverless** compute and run all cells (env = `dev`).
 3. Open `src/01_synthetic_data.py` and run all cells. The data lands in
    `/Volumes/demand_planning/raw/source_files/staging/batch_00{1,2}/`.

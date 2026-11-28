@@ -1,0 +1,29 @@
+# CD: validate + deploy the Databricks Asset Bundle.
+#  - every push to main      -> deploy to dev
+#  - manual "Run workflow"   -> deploy to prod (protect the "production" environment with a required reviewer)
+# Repository secrets needed: DATABRICKS_HOST, DATABRICKS_TOKEN (use a service principal token for prod).
+name: deploy
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      target:
+        description: "Bundle target"
+        required: true
+        default: prod
+        type: choice
+        options: [dev, prod]
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: ${{ github.event_name == 'workflow_dispatch' && inputs.target == 'prod' && 'production' || 'development' }}
+    env:
+      DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
+      DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
+      TARGET: ${{ github.event_name == 'workflow_dispatch' && inputs.target || 'dev' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: databricks/setup-cli@main
+      - run: databricks bundle validate -t "$TARGET"
+      - run: databricks bundle deploy -t "$TARGET"

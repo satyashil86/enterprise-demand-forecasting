@@ -2,7 +2,7 @@
 # Phase 0/1 scope: setup + synthetic data job. Later phases append tasks to resources/jobs.
 #   databricks bundle validate -t dev
 #   databricks bundle deploy   -t dev
-#   databricks bundle run      -t dev dfp_foundation
+#   databricks bundle run      -t dev dfp_pipeline
 bundle:
   name: enterprise_demand_forecasting
 

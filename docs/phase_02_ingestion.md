@@ -17,7 +17,7 @@ Checkpoints and schema locations: `/Volumes/<catalog>/raw/checkpoints/bronze/<so
 |---|---|
 | Full batch | COPY INTO for master data; the first Auto Loader run with `includeExistingFiles=true` |
 | Incremental | Auto Loader's checkpoint tracks processed files; COPY INTO load history |
-| Streaming / micro-batch | Structured Streaming with `trigger(availableNow=True)`, `maxFilesPerTrigger=50` (several micro-batches per run). Serverless only allows availableNow, so scheduled micro-batches come from the job schedule (`resources/foundation_job.yml`, paused by default) |
+| Streaming / micro-batch | Structured Streaming with `trigger(availableNow=True)`, `maxFilesPerTrigger=50` (several micro-batches per run). Serverless only allows availableNow, so scheduled micro-batches come from the job schedule (`resources/pipeline_job.yml`, paused by default) |
 | Schema inference + explicit management | Auto Loader infers into the schema location. `config/schema_config.yml` is the contract. Drift (columns outside the contract, missing columns) goes to `monitoring.schema_change_log` |
 | Schema evolution | `cloudFiles.schemaEvolutionMode=addNewColumns` plus Delta `mergeSchema`. The stream stops once on new columns and is restarted automatically (`schema_restarts`). COPY INTO uses `mergeSchema` |
 | Rescued data | `_rescued_data` column (Auto Loader default when it infers the schema) |

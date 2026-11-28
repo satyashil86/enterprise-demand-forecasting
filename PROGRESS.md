@@ -1,36 +1,41 @@
-# Project progress tracker (condensed 10-phase plan)
+# Project progress tracker (10-phase plan)
 
-Status key: ✅ passed on Databricks · 🟡 code complete and tested locally, awaiting a Databricks run · ⬜ not started
+Status key: ✅ passed on Databricks · 🟡 built and passed end-to-end on local Spark with the synthetic data, needs a Databricks run · ⬜ not started
 
 | # | Phase | Notebook(s) | Status | Evidence |
 |---|---|---|---|---|
-| 1 | Setup + synthetic data | `00_setup`, `01_synthetic_data` | ✅ | Phase 0 checks passed; Phase 1 ran with no errors (24-Nov-2026). Locally: 64/64 data checks. |
-| 2 | Ingestion → Bronze (Auto Loader, COPY INTO) | `02_raw_ingestion` | ✅ | `PHASE 2 ACCEPTANCE: PASSED (55 checks)` on Databricks (25-Nov-2026). |
-| 3 | Silver: data quality, quarantine, MERGE, SCD1/SCD2 (+ Bronze append-only, time travel, clustering) | `03_silver_cleansing` | ✅ | `PHASE 3 ACCEPTANCE: PASSED (56 checks)` on Databricks (26-Nov-2026). |
-| 4 | Gold (star schema) + EDA, simplified plain PySpark | `04_gold`, `05_eda` | ✅ | `PHASE 4 GOLD: PASSED` on Databricks (27-Nov-2026): 93,299 rows, 645 series, 2023-11-27 → 2026-11-16. |
-| 5 | Outliers + feature engineering (leakage-safe) | `06_outliers`, `07_features` | 🟡 | Local Spark run: 15 weeks treated as errors, 14 of them real (14/16 injected ×10 typos caught), 0 genuine spikes changed; 45 features, all 4 leakage checks pass. Needs a Databricks run. |
-| 6 | Models: Seasonal Naive, AutoARIMA, XGBoost/LightGBM, (RF), TimeGPT (optional) | `08_models` | ⬜ | |
-| 7 | Backtesting, WAPE model selection, 104-week forecast (P10/P50/P90) | `09_backtest_select`, `10_forecast` | ⬜ | |
-| 8 | Inventory risk + monitoring | `11_inventory`, `12_monitoring` | ⬜ | |
-| 9 | Dashboard (Databricks AI/BI, 5 pages) + Unity Catalog governance | `13_governance` | ⬜ | Needs `demand_planning_dashboard.html` as the reference |
-| 10 | Orchestration (Lakeflow Job), CI/CD (Asset Bundles + GitHub Actions), Azure essentials | `databricks.yml`, `.github/` | 🟡 | Bundle and job skeleton (tasks t00–t05), CI runs the tests |
+| 1 | Setup + synthetic data | `00_setup`, `01_synthetic_data` | ✅ | Phase 0 checks passed; Phase 1 ran with no errors (24-Nov-2026). |
+| 2 | Ingestion → Bronze (Auto Loader, COPY INTO) | `02_raw_ingestion` | ✅ | `PHASE 2 ACCEPTANCE: PASSED (55 checks)` (25-Nov-2026). |
+| 3 | Silver: quality, quarantine, MERGE, SCD1/SCD2 | `03_silver_cleansing` | ✅ | `PHASE 3 ACCEPTANCE: PASSED (56 checks)` (26-Nov-2026). |
+| 4 | Gold star schema + EDA | `04_gold`, `05_eda` | ✅ | `PHASE 4 GOLD: PASSED`: 93,299 rows, 645 series (27-Nov-2026). |
+| 5 | Outliers + features | `06_outliers`, `07_features` | ✅ | `PHASE 5 FEATURES: PASSED`: 45 features, leakage checks pass (28-Nov-2026). |
+| 6 | Models + rolling backtest + WAPE selection | `08_models_backtest` | 🟡 | Local: LightGBM 34.7% WAPE, XGBoost 34.7%, RF 39.4%, MSTL-ARIMA 47.0%, Seasonal Naive 51.4% (FVA ≈ 17 pts); winners per segment: 9 LightGBM, 7 XGBoost, 3 RF, 1 SN. |
+| 7 | 104-week forecast, P10/P50/P90 | `09_forecast` | 🟡 | Local: 594 active series × 104 weeks; P10–P90 coverage on the held-out origin 81% (target 80%). |
+| 8 | Inventory risk + monitoring | `10_inventory_monitoring` | 🟡 | Local: 222 SKU-regions (10 high, 52 medium stockout risk, 14 excess); health-check table. |
+| 9 | Dashboard views + governance | `11_dashboard_governance` + `docs/dashboard_guide.md` | 🟡 | Local: 7 dashboard views and grounded insights. GRANTs, the secure view and system tables only run on Databricks. |
+| 10 | Orchestration, CI/CD, Azure | `resources/pipeline_job.yml`, `.github/workflows/deploy.yml`, `docs/azure_integration.md` | 🟡 | One job with 12 tasks, dependencies and retries; deploy workflow (dev on push, prod with approval); Azure guide. |
 
-## Phase gate for 5
-1. Copy the new files into `C:\demand-forecasting-platform`, then run `git add -A`, `git commit`, `git push`.
-2. In Databricks, discard any run-only changes, then click **Pull**.
-3. Run `src/06_outliers`. It should end with `PHASE 5 OUTLIERS: PASSED`.
-4. Run `src/07_features`. It should end with `PHASE 5 FEATURES: PASSED`.
-
-## Style from Phase 4 on
-Notebooks are written in plain PySpark: each step sits in its own cell with a short explanation and simple `assert` checks. There are no new helper libraries. Phases 0–3 are kept as they are, because they have already passed.
+## How to run phases 6–10 on Databricks
+1. Copy the new files into `C:\demand-forecasting-platform`, then run `git add -A`, `git commit`, `git push`. In Databricks, discard any run-only changes, then click **Pull**.
+2. Run in order: `08_models_backtest` (≈10–20 min), `09_forecast` (≈5–10 min), `10_inventory_monitoring`, `11_dashboard_governance`.
+3. Create the 5 groups (Settings → Identity and access → Groups), add yourself to `demand_admin`, and re-run notebook 11.
+4. Build the dashboard following `docs/dashboard_guide.md`.
+5. Optional: Jobs & Pipelines → create the job from `resources/pipeline_job.yml` (or `databricks bundle deploy`), then GitHub secrets for `deploy.yml`.
 
 ## Decisions
-- **Demand target:** `orders.ordered_quantity` (unconstrained). Shipments are capped by stock.
-- **Silver is a curated contract:** Bronze evolves automatically, Silver only through a change to `dfp/silver.py: SPECS`.
-- **Incremental Silver:** a high-watermark on Bronze `_ingested_at` plus idempotent MERGE (no streaming foreachBatch, so it runs reliably on serverless).
-- **Keying spikes (×50 / ×10)** stay in Silver; they are separated from genuine spikes in the outlier phase.
-- **Late-arriving dimension:** facts with an unknown SKU are quarantined. Re-processing them after the master arrives is a planned improvement.
+- **Demand target:** `orders.ordered_quantity` (unconstrained), cleaned in notebook 06 (`actual_demand_clean`).
+- **Silver is a curated contract**; Bronze evolves automatically.
+- **Outliers:** an order spike is a data error only if POS over the surrounding 3 weeks doesn't support it.
+- **Long horizons:** one global ML model per algorithm; features = level at the origin + planned drivers for the target week + the same week 52/104 weeks earlier. No lags after the origin, so the backtest and production use the same code.
+- **ARIMA:** MSTL (52-week season) + AutoARIMA. Plain SARIMA with m=52 was 5× slower.
+- **Backtest:** 3 origins (52, 39 and 26 weeks before the end), horizons 1–52. A 104-week backtest needs ≥ 4 years of history.
+- **Intervals:** empirical quantiles of backtest errors per model and horizon; beyond 52 weeks widened by 50% (assumption).
+- **Selection:** per category × demand pattern, lowest WAPE with |bias| ≤ 20%; fallback LightGBM.
+- **Governance:** dynamic views (row filter and column mask); base tables are not masked, so pipelines keep running.
+
+## Style from Phase 4 on
+Plain PySpark notebooks with short explanations and `assert` checks. One small shared helper (`dfp/forecasting.py`) is used by notebooks 08 and 09.
 
 ## Open items
-- Nixtla TimeGPT: a paid API, and Free Edition has limited outbound access. Check before the model phase.
-- RBAC groups: Free Edition has no account console. Check workspace-local groups in phase 9.
+- TimeGPT: an optional cell that runs only if a Nixtla key is stored as a secret and outbound access is allowed.
+- Workspace groups must be created by an admin before the GRANTs apply.

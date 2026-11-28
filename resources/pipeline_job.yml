@@ -1,0 +1,64 @@
+# One Lakeflow Job = the whole platform, task by task (serverless; Free Edition compatible).
+#   databricks bundle deploy -t dev
+#   databricks bundle run    -t dev dfp_pipeline
+# Each task runs only after the tasks it depends on succeeded; failed tasks retry automatically.
+resources:
+  jobs:
+    dfp_pipeline:
+      name: "[${bundle.target}] dfp_pipeline - demand forecasting"
+      max_concurrent_runs: 1
+      timeout_seconds: 10800            # stop a stuck run after 3 hours
+      parameters:
+        - name: env
+          default: ${var.env}
+      # email_notifications:            # add your address to get failure alerts
+      #   on_failure: ["you@example.com"]
+      schedule:                         # weekly run on Monday 06:15 IST - un-pause when ready
+        quartz_cron_expression: "0 15 6 ? * MON"
+        timezone_id: Asia/Kolkata
+        pause_status: PAUSED
+      tasks:
+        - task_key: t00_setup
+          notebook_task: {notebook_path: ../src/00_setup.py, base_parameters: {env: "{{job.parameters.env}}"}}
+          max_retries: 1
+          min_retry_interval_millis: 60000
+        - task_key: t01_synthetic_data
+          depends_on: [{task_key: t00_setup}]
+          notebook_task: {notebook_path: ../src/01_synthetic_data.py, base_parameters: {env: "{{job.parameters.env}}", overwrite: "false"}}
+        - task_key: t02_raw_ingestion
+          depends_on: [{task_key: t01_synthetic_data}]
+          notebook_task: {notebook_path: ../src/02_raw_ingestion.py, base_parameters: {env: "{{job.parameters.env}}", mode: incremental}}
+          max_retries: 2
+          min_retry_interval_millis: 60000
+        - task_key: t03_silver
+          depends_on: [{task_key: t02_raw_ingestion}]
+          notebook_task: {notebook_path: ../src/03_silver_cleansing.py, base_parameters: {env: "{{job.parameters.env}}", mode: run}}
+          max_retries: 1
+        - task_key: t04_gold
+          depends_on: [{task_key: t03_silver}]
+          notebook_task: {notebook_path: ../src/04_gold.py}
+          max_retries: 1
+        - task_key: t05_eda
+          depends_on: [{task_key: t04_gold}]
+          notebook_task: {notebook_path: ../src/05_eda.py}
+        - task_key: t06_outliers
+          depends_on: [{task_key: t04_gold}]
+          notebook_task: {notebook_path: ../src/06_outliers.py}
+          max_retries: 1
+        - task_key: t07_features
+          depends_on: [{task_key: t06_outliers}]
+          notebook_task: {notebook_path: ../src/07_features.py}
+          max_retries: 1
+        - task_key: t08_models_backtest
+          depends_on: [{task_key: t07_features}, {task_key: t05_eda}]
+          notebook_task: {notebook_path: ../src/08_models_backtest.py}
+        - task_key: t09_forecast
+          depends_on: [{task_key: t08_models_backtest}]
+          notebook_task: {notebook_path: ../src/09_forecast.py}
+        - task_key: t10_inventory_monitoring
+          depends_on: [{task_key: t09_forecast}]
+          notebook_task: {notebook_path: ../src/10_inventory_monitoring.py}
+          max_retries: 1
+        - task_key: t11_dashboard_governance
+          depends_on: [{task_key: t10_inventory_monitoring}]
+          notebook_task: {notebook_path: ../src/11_dashboard_governance.py}
